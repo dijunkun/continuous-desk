@@ -15,11 +15,11 @@ int main() {
 
   static am::record_desktop *recorder = new am::record_desktop_wgc();
 
-	RECORD_DESKTOP_RECT rect;
-	rect.left = 0;
-	rect.top = 0;
-	rect.right = GetSystemMetrics(SM_CXSCREEN);
-	rect.bottom = GetSystemMetrics(SM_CYSCREEN);
+  RECORD_DESKTOP_RECT rect;
+  rect.left = 0;
+  rect.top = 0;
+  rect.right = GetSystemMetrics(SM_CXSCREEN);
+  rect.bottom = GetSystemMetrics(SM_CYSCREEN);
 
   recorder->init(rect, 10);
 
@@ -28,7 +28,8 @@ int main() {
   // int resume() override;
   // int stop() override;
 
-  while(1){}
+  while (1) {
+  }
 
   return 0;
 }
