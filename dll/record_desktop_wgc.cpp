@@ -1,18 +1,21 @@
 #include "record_desktop_wgc.h"
 
+#include "utils_string.h"
+
+#include "system_error.h"
 #include "error_define.h"
 #include "log_helper.h"
-#include "system_error.h"
-#include "utils_string.h"
 
 BOOL WINAPI EnumMonitorProc(HMONITOR hmonitor, HDC hdc, LPRECT lprc,
                             LPARAM data) {
+
   MONITORINFOEX info_ex;
   info_ex.cbSize = sizeof(MONITORINFOEX);
 
   GetMonitorInfo(hmonitor, &info_ex);
 
-  if (info_ex.dwFlags == DISPLAY_DEVICE_MIRRORING_DRIVER) return true;
+  if (info_ex.dwFlags == DISPLAY_DEVICE_MIRRORING_DRIVER)
+    return true;
 
   if (info_ex.dwFlags & MONITORINFOF_PRIMARY) {
     *(HMONITOR *)data = hmonitor;
@@ -31,6 +34,7 @@ HMONITOR GetPrimaryMonitor() {
 
 namespace am {
 
+
 record_desktop_wgc::record_desktop_wgc() {}
 
 record_desktop_wgc::~record_desktop_wgc() {
@@ -40,7 +44,8 @@ record_desktop_wgc::~record_desktop_wgc() {
 
 int record_desktop_wgc::init(const RECORD_DESKTOP_RECT &rect, const int fps) {
   int error = AE_NO;
-  if (_inited == true) return error;
+  if (_inited == true)
+    return error;
 
   _fps = fps;
   _rect = rect;
@@ -49,12 +54,12 @@ int record_desktop_wgc::init(const RECORD_DESKTOP_RECT &rect, const int fps) {
   _pixel_fmt = AV_PIX_FMT_BGRA;
 
   do {
-    if (!module_.is_supported()) {
+    if (!wgc_is_supported()) {
       error = AE_UNSUPPORT;
       break;
     }
 
-    session_ = module_.create_session();
+    session_ = wgc_create_session();
     if (!session_) {
       error = AE_WGC_CREATE_CAPTURER_FAILED;
       break;
@@ -93,20 +98,23 @@ int record_desktop_wgc::start() {
 
 int record_desktop_wgc::pause() {
   _paused = true;
-  if (session_) session_->pause();
+  if (session_)
+    session_->pause();
   return AE_NO;
 }
 
 int record_desktop_wgc::resume() {
   _paused = false;
-  if (session_) session_->resume();
+  if (session_)
+    session_->resume();
   return AE_NO;
 }
 
 int record_desktop_wgc::stop() {
   _running = false;
 
-  if (session_) session_->stop();
+  if (session_)
+    session_->stop();
 
   return AE_NO;
 }
@@ -128,7 +136,8 @@ void record_desktop_wgc::on_frame(const wgc_session::wgc_session_frame &frame) {
   av_image_fill_arrays(av_frame->data, av_frame->linesize, frame.data,
                        AV_PIX_FMT_BGRA, frame.width, frame.height, 1);
 
-  if (_on_data) _on_data(av_frame);
+  if (_on_data)
+    _on_data(av_frame);
 
   av_frame_free(&av_frame);
 }
@@ -136,9 +145,10 @@ void record_desktop_wgc::on_frame(const wgc_session::wgc_session_frame &frame) {
 void record_desktop_wgc::clean_up() {
   _inited = false;
 
-  if (session_) session_->release();
+  if (session_)
+    session_->release();
 
   session_ = nullptr;
 }
 
-}  // namespace am
+} // namespace am

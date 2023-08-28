@@ -97,9 +97,9 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE previousInstance,
   WINRT_VERIFY(comboBoxHwnd);
 
   // Populate combo box
-  for (auto &window : g_windows) {
-    SendMessage(comboBoxHwnd, CB_ADDSTRING, 0, (LPARAM)window.Title().c_str());
-  }
+  // for (auto &window : g_windows) {
+  //   SendMessage(comboBoxHwnd, CB_ADDSTRING, 0, (LPARAM)window.Title().c_str());
+  // }
 
   for (auto &monitor : g_monitors) {
     SendMessage(comboBoxHwnd, CB_ADDSTRING, 0,
@@ -135,24 +135,25 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE previousInstance,
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
   switch (msg) {
-  case WM_DESTROY:
-    PostQuitMessage(0);
-    break;
-  case WM_COMMAND:
-    if (HIWORD(wParam) == CBN_SELCHANGE) {
-      auto index = SendMessage((HWND)lParam, CB_GETCURSEL, 0, 0);
-      if (index < g_windows.size() - 1) {
-        auto window = g_windows[index];
-        g_app->StartCapture(window.Hwnd());
-      } else {
-        auto monitor = g_monitors[index - g_windows.size()];
-        g_app->StartCapture(monitor.Hmonitor());
+    case WM_DESTROY:
+      PostQuitMessage(0);
+      break;
+    case WM_COMMAND:
+      if (HIWORD(wParam) == CBN_SELCHANGE) {
+        auto index = SendMessage((HWND)lParam, CB_GETCURSEL, 0, 0);
+        // if (index < g_windows.size() - 1) {
+        //   auto window = g_windows[index];
+        //   g_app->StartCapture(window.Hwnd());
+        // } else {
+          // auto monitor = g_monitors[index - g_windows.size()];
+          auto monitor = g_monitors[0];
+          g_app->StartCapture(monitor.Hmonitor());
+        // }
       }
-    }
-    break;
-  default:
-    return DefWindowProc(hwnd, msg, wParam, lParam);
-    break;
+      break;
+    default:
+      return DefWindowProc(hwnd, msg, wParam, lParam);
+      break;
   }
 
   return 0;
