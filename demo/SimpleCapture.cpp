@@ -12,8 +12,9 @@
 //
 //*********************************************************
 
-#include "pch.h"
 #include "SimpleCapture.h"
+
+#include "pch.h"
 
 using namespace winrt;
 using namespace Windows;
@@ -107,7 +108,6 @@ void SimpleCapture::OnFrameArrived(
       auto frameSurface =
           GetDXGIInterfaceFromObject<ID3D11Texture2D>(frame.Surface());
 
-
       com_ptr<ID3D11Texture2D> backBuffer;
       check_hresult(m_swapChain->GetBuffer(0, guid_of<ID3D11Texture2D>(),
                                            backBuffer.put_void()));
@@ -123,8 +123,7 @@ void SimpleCapture::OnFrameArrived(
       auto frameSurface =
           GetDXGIInterfaceFromObject<ID3D11Texture2D>(frame.Surface());
 
-      if (!m_mappedTexture || newSize)
-        CreateMappedTexture(frameSurface);
+      if (!m_mappedTexture || newSize) CreateMappedTexture(frameSurface);
 
       m_d3dContext->CopyResource(m_mappedTexture.get(), frameSurface.get());
 
@@ -136,8 +135,7 @@ void SimpleCapture::OnFrameArrived(
 #if 1
       if (mapInfo.pData) {
         static unsigned char *buffer = nullptr;
-        if (buffer && newSize)
-          delete[] buffer;
+        if (buffer && newSize) delete[] buffer;
 
         if (!buffer)
           buffer = new unsigned char[frameContentSize.Width *
@@ -156,7 +154,7 @@ void SimpleCapture::OnFrameArrived(
         bi.biWidth = frameContentSize.Width;
         bi.biHeight = frameContentSize.Height * (-1);
         bi.biPlanes = 1;
-        bi.biBitCount = 32; // should get from system color bits
+        bi.biBitCount = 32;  // should get from system color bits
         bi.biCompression = BI_RGB;
         bi.biSizeImage = 0;
         bi.biXPelsPerMeter = 0;

@@ -1,14 +1,30 @@
-#pragma once
+#ifndef _WGC_SESSION_IMPL_H_
+#define _WGC_SESSION_IMPL_H_
+
+#include <d3d11_4.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Graphics.Capture.h>
 
 #include <mutex>
 #include <thread>
 
-namespace am {
-class wgc_session_impl : public wgc_session {
+#include "wgc_session.h"
+
+class WgcSessionImpl : public WgcSession {
   struct __declspec(uuid("A9B3D012-3DF2-4EE3-B8D1-8695F457D3C1"))
       IDirect3DDxgiInterfaceAccess : ::IUnknown {
     virtual HRESULT __stdcall GetInterface(GUID const &id, void **object) = 0;
   };
+
+  template <typename T>
+  inline auto GetDXGIInterfaceFromObject(
+      winrt::Windows::Foundation::IInspectable const &object) {
+    auto access = object.as<IDirect3DDxgiInterfaceAccess>();
+    winrt::com_ptr<T> result;
+    winrt::check_hresult(
+        access->GetInterface(winrt::guid_of<T>(), result.put_void()));
+    return result;
+  }
 
   struct {
     union {
@@ -18,47 +34,44 @@ class wgc_session_impl : public wgc_session {
     bool is_window;
   } target_{0};
 
-public:
-  wgc_session_impl();
-  ~wgc_session_impl() override;
+ public:
+  WgcSessionImpl();
+  ~WgcSessionImpl() override;
 
-public:
-  void release() override;
+ public:
+  void Release() override;
 
-  int initialize(HWND hwnd) override;
-  int initialize(HMONITOR hmonitor) override;
+  int Initialize(HWND hwnd) override;
+  int Initialize(HMONITOR hmonitor) override;
 
-  void register_observer(wgc_session_observer *observer) override;
+  void RegisterObserver(wgc_session_observer *observer) override;
 
-  int start() override;
-  int stop() override;
+  int Start() override;
+  int Stop() override;
 
-  int pause() override;
-  int resume() override;
+  int Pause() override;
+  int Resume() override;
 
-private:
-  auto create_d3d11_device();
-  auto create_capture_item(HWND hwnd);
-  auto create_capture_item(HMONITOR hmonitor);
-  template <typename T>
-  auto
-  get_dxgi_interface(winrt::Windows::Foundation::IInspectable const &object);
-  HRESULT create_mapped_texture(winrt::com_ptr<ID3D11Texture2D> src_texture,
-                                unsigned int width = 0,
-                                unsigned int height = 0);
-  void
-  on_frame(winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool const
-               &sender,
-           winrt::Windows::Foundation::IInspectable const &args);
-  void on_closed(winrt::Windows::Graphics::Capture::GraphicsCaptureItem const &,
-                 winrt::Windows::Foundation::IInspectable const &);
+ private:
+  auto CreateD3D11Device();
+  auto CreateCaptureItemForWindow(HWND hwnd);
+  auto CreateCaptureItemForMonitor(HMONITOR hmonitor);
 
-  int initialize();
-  void cleanup();
+  HRESULT CreateMappedTexture(winrt::com_ptr<ID3D11Texture2D> src_texture,
+                              unsigned int width = 0, unsigned int height = 0);
+  void OnFrame(
+      winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool const
+          &sender,
+      winrt::Windows::Foundation::IInspectable const &args);
+  void OnClosed(winrt::Windows::Graphics::Capture::GraphicsCaptureItem const &,
+                winrt::Windows::Foundation::IInspectable const &);
 
-  void message_func();
+  int Initialize();
+  void CleanUp();
 
-private:
+  // void message_func();
+
+ private:
   std::mutex lock_;
   bool is_initialized_ = false;
   bool is_running_ = false;
@@ -90,15 +103,14 @@ private:
   HWND hwnd_ = nullptr;
 };
 
-template <typename T>
-inline auto wgc_session_impl::get_dxgi_interface(
-    winrt::Windows::Foundation::IInspectable const &object) {
-  auto access = object.as<IDirect3DDxgiInterfaceAccess>();
-  winrt::com_ptr<T> result;
-  winrt::check_hresult(
-      access->GetInterface(winrt::guid_of<T>(), result.put_void()));
-  return result;
-}
+// template <typename T>
+// inline auto WgcSessionImpl::GetDXGIInterfaceFromObject(
+//     winrt::Windows::Foundation::IInspectable const &object) {
+//   auto access = object.as<IDirect3DDxgiInterfaceAccess>();
+//   winrt::com_ptr<T> result;
+//   winrt::check_hresult(
+//       access->GetInterface(winrt::guid_of<T>(), result.put_void()));
+//   return result;
+// }
 
-
-} // namespace am
+#endif
