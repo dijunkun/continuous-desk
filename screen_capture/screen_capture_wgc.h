@@ -3,22 +3,13 @@
 
 #include <Windows.h>
 
-#include "wgc_session.h"
-#include "wgc_session_impl.h"
-
-extern "C" {
-#include <libavcodec\avcodec.h>
-#include <libavfilter\avfilter.h>
-#include <libavformat\avformat.h>
-#include <libavutil\imgutils.h>
-#include <libavutil\time.h>
-#include <libswscale/swscale.h>
-}
-
 #include <atomic>
 #include <functional>
 #include <string>
 #include <thread>
+
+#include "wgc_session.h"
+#include "wgc_session_impl.h"
 
 typedef struct {
   int left;
@@ -67,10 +58,6 @@ class ScreenCaptureWgc : public WgcSession::wgc_session_observer {
 
   cb_desktop_data _on_data;
   cb_desktop_error _on_error;
-
-  AVRational _time_base;
-  int64_t _start_time;
-  AVPixelFormat _pixel_fmt;
 };
 
 #endif

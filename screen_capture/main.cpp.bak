@@ -19,9 +19,7 @@ extern "C" {
 int screen_w = 2560, screen_h = 1440;
 const int pixel_w = 2560, pixel_h = 1440;
 
-unsigned char buffer[pixel_w * pixel_h * 3 / 2];
 unsigned char dst_buffer[pixel_w * pixel_h * 3 / 2];
-unsigned char rgbData[pixel_w * pixel_h * 4];
 SDL_Texture *sdlTexture = nullptr;
 SDL_Renderer *sdlRenderer = nullptr;
 SDL_Rect sdlRect;

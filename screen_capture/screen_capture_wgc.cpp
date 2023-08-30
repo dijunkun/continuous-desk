@@ -55,10 +55,7 @@ int ScreenCaptureWgc::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
   if (_inited == true) return error;
 
   _fps = fps;
-  _rect = rect;
-  _start_time = av_gettime_relative();
-  _time_base = {1, AV_TIME_BASE};
-  _pixel_fmt = AV_PIX_FMT_BGRA;
+
   _on_data = cb;
 
   do {
@@ -126,71 +123,9 @@ int ScreenCaptureWgc::Stop() {
 }
 
 void ScreenCaptureWgc::OnFrame(const WgcSession::wgc_session_frame &frame) {
-  // std::cout << "onframe" << std::endl;
-  // AVFrame *av_frame = av_frame_alloc();
-
-  // av_frame->pts = av_gettime_relative();
-  // av_frame->pkt_dts = av_frame->pts;
-  // // av_frame->pkt_pts = av_frame->pts;
-
-  // av_frame->width = frame.width;
-  // av_frame->height = frame.height;
-  // av_frame->format = AV_PIX_FMT_BGRA;
-  // av_frame->pict_type = AV_PICTURE_TYPE_NONE;
-  // av_frame->pkt_size = frame.width * frame.height * 4;
-
-  // av_image_fill_arrays(av_frame->data, av_frame->linesize, frame.data,
-  //                      AV_PIX_FMT_BGRA, frame.width, frame.height, 1);
-
   if (_on_data)
     _on_data((unsigned char *)frame.data, frame.width * frame.height * 4,
              frame.width, frame.height);
-
-  // av_frame_free(&av_frame);
-
-  // BGRA to YUV
-  // auto swrCtxBGRA2YUV = sws_getContext(
-  //     frame.width, frame.height, AV_PIX_FMT_BGRA, frame.width, frame.height,
-  //     AV_PIX_FMT_YUV420P, SWS_BICUBIC, NULL, NULL, NULL);
-
-  // create BGRA
-  // AVFrame *frame_bgra = av_frame;
-  // AVFrame *frame_bgra = av_frame_alloc();
-  // frame_bgra->format = AV_PIX_FMT_BGRA;
-  // frame_bgra->width = frame.width;
-  // frame_bgra->height = frame.height;
-  // if (av_frame_get_buffer(frame_bgra, 32) < 0) {
-  //   printf("Failed: av_frame_get_buffer\n");
-  //   return;
-  // }
-  // frame_bgra->data[0] = cropImage;
-
-  // YUV
-  // AVFrame *frame_yuv = av_frame_alloc();
-  // frame_yuv->width = frame.width;
-  // frame_yuv->height = frame.height;
-  // frame_yuv->format = AV_PIX_FMT_YUV420P;
-
-  // uint8_t *picture_buf =
-  //     (uint8_t *)av_malloc(frame.width * frame.height * 3 / 2);
-  // if (av_image_fill_arrays(frame_yuv->data, frame_yuv->linesize, picture_buf,
-  //                          AV_PIX_FMT_YUV420P, frame.width, frame.height,
-  //                          1) < 0) {
-  //   std::cout << "Failed: av_image_fill_arrays" << std::endl;
-  //   return;
-  // }
-
-  // if (sws_scale(swrCtxBGRA2YUV, frame_bgra->data, frame_bgra->linesize, 0,
-  //               frame.height, frame_yuv->data, frame_yuv->linesize) < 0) {
-  //   std::cout << "BGRA to YUV failed" << std::endl;
-  //   return;
-  // }
-
-  // frame_yuv->pts = av_gettime();
-
-  // if (_on_data)
-  //   _on_data((unsigned char *)frame_yuv->data,
-  //            frame.width * frame.height * 3 / 2, frame.width, frame.height);
 }
 
 void ScreenCaptureWgc::CleanUp() {
