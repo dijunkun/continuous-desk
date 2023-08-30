@@ -126,7 +126,7 @@ int ScreenCaptureWgc::Stop() {
 }
 
 void ScreenCaptureWgc::OnFrame(const WgcSession::wgc_session_frame &frame) {
-  std::cout << "onframe" << std::endl;
+  // std::cout << "onframe" << std::endl;
   // AVFrame *av_frame = av_frame_alloc();
 
   // av_frame->pts = av_gettime_relative();

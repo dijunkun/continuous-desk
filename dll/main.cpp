@@ -17,7 +17,7 @@ extern "C" {
 #include "SDL2/SDL.h"
 
 int screen_w = 2560, screen_h = 1440;
-const int pixel_w = 1280, pixel_h = 720;
+const int pixel_w = 2560, pixel_h = 1440;
 
 unsigned char buffer[pixel_w * pixel_h * 3 / 2];
 unsigned char dst_buffer[pixel_w * pixel_h * 3 / 2];
@@ -28,39 +28,20 @@ SDL_Rect sdlRect;
 
 // Refresh Event
 #define REFRESH_EVENT (SDL_USEREVENT + 1)
+#define QUIT_EVENT (SDL_USEREVENT + 2)
 
 int thread_exit = 0;
 
 int refresh_video(void *opaque) {
+  SDL_Event event;
   while (thread_exit == 0) {
-    SDL_Event event;
     event.type = REFRESH_EVENT;
     SDL_PushEvent(&event);
     SDL_Delay(10);
   }
-  return 0;
-}
 
-int YUV420ToNV12FFmpeg(unsigned char *src_buffer, int width, int height,
-                       unsigned char *des_buffer) {
-  AVFrame *Input_pFrame = av_frame_alloc();
-  AVFrame *Output_pFrame = av_frame_alloc();
-  struct SwsContext *img_convert_ctx = sws_getContext(
-      width, height, AV_PIX_FMT_YUV420P, 1280, 720, AV_PIX_FMT_NV12,
-      SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
-
-  av_image_fill_arrays(Input_pFrame->data, Input_pFrame->linesize, src_buffer,
-                       AV_PIX_FMT_YUV420P, width, height, 1);
-  av_image_fill_arrays(Output_pFrame->data, Output_pFrame->linesize, des_buffer,
-                       AV_PIX_FMT_NV12, 1280, 720, 1);
-
-  sws_scale(img_convert_ctx, (uint8_t const **)Input_pFrame->data,
-            Input_pFrame->linesize, 0, height, Output_pFrame->data,
-            Output_pFrame->linesize);
-
-  if (Input_pFrame) av_free(Input_pFrame);
-  if (Output_pFrame) av_free(Output_pFrame);
-  if (img_convert_ctx) sws_freeContext(img_convert_ctx);
+  event.type = QUIT_EVENT;
+  SDL_PushEvent(&event);
 
   return 0;
 }
@@ -69,14 +50,14 @@ int BGRAToNV12FFmpeg(unsigned char *src_buffer, int width, int height,
                      unsigned char *dst_buffer) {
   AVFrame *Input_pFrame = av_frame_alloc();
   AVFrame *Output_pFrame = av_frame_alloc();
-  struct SwsContext *img_convert_ctx =
-      sws_getContext(width, height, AV_PIX_FMT_BGRA, 1280, 720, AV_PIX_FMT_NV12,
-                     SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
+  struct SwsContext *img_convert_ctx = sws_getContext(
+      width, height, AV_PIX_FMT_BGRA, width, height, AV_PIX_FMT_NV12,
+      SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
 
   av_image_fill_arrays(Input_pFrame->data, Input_pFrame->linesize, src_buffer,
                        AV_PIX_FMT_BGRA, width, height, 1);
   av_image_fill_arrays(Output_pFrame->data, Output_pFrame->linesize, dst_buffer,
-                       AV_PIX_FMT_NV12, 1280, 720, 1);
+                       AV_PIX_FMT_NV12, width, height, 1);
 
   sws_scale(img_convert_ctx, (uint8_t const **)Input_pFrame->data,
             Input_pFrame->linesize, 0, height, Output_pFrame->data,
@@ -90,23 +71,7 @@ int BGRAToNV12FFmpeg(unsigned char *src_buffer, int width, int height,
 }
 
 void OnFrame(unsigned char *data, int size, int width, int height) {
-  std::cout << "Receive frame: w:" << width << " h:" << height
-            << " size:" << size << std::endl;
-  // YUV420ToNV12FFmpeg(data, width, height, dst_buffer);
   BGRAToNV12FFmpeg(data, width, height, dst_buffer);
-
-  SDL_UpdateTexture(sdlTexture, NULL, dst_buffer, pixel_w);
-  // memcpy(rgbData, data, width * height);
-
-  // FIX: If window is resize
-  sdlRect.x = 0;
-  sdlRect.y = 0;
-  sdlRect.w = screen_w;
-  sdlRect.h = screen_h;
-
-  SDL_RenderClear(sdlRenderer);
-  SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, &sdlRect);
-  SDL_RenderPresent(sdlRenderer);
 }
 
 int main() {
@@ -141,13 +106,7 @@ int main() {
   pixformat = SDL_PIXELFORMAT_NV12;
 
   sdlTexture = SDL_CreateTexture(sdlRenderer, pixformat,
-                                 SDL_TEXTUREACCESS_STREAMING, 1280, 720);
-
-  // SDL_Surface *surface =
-  //     SDL_CreateRGBSurfaceFrom(rgbData, pixel_w, pixel_h, 24, pixel_w * 3,
-  //                              0x000000FF, 0x0000FF00, 0x00FF0000, 0);
-
-  // sdlTexture = SDL_CreateTextureFromSurface(sdlRenderer, surface);
+                                 SDL_TEXTUREACCESS_STREAMING, pixel_w, pixel_h);
 
   SDL_Thread *refresh_thread = SDL_CreateThread(refresh_video, NULL, NULL);
   SDL_Event event;
@@ -155,9 +114,19 @@ int main() {
     // Wait
     SDL_WaitEvent(&event);
     if (event.type == REFRESH_EVENT) {
+      sdlRect.x = 0;
+      sdlRect.y = 0;
+      sdlRect.w = screen_w;
+      sdlRect.h = screen_h;
+
+      SDL_UpdateTexture(sdlTexture, NULL, dst_buffer, pixel_w);
+      SDL_RenderClear(sdlRenderer);
+      SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, &sdlRect);
+      SDL_RenderPresent(sdlRenderer);
     } else if (event.type == SDL_WINDOWEVENT) {
       // If Resize
       SDL_GetWindowSize(screen, &screen_w, &screen_h);
+      printf("Resize windows: %dx%d\n", screen_w, screen_h);
     } else if (event.type == SDL_QUIT) {
       break;
     }
