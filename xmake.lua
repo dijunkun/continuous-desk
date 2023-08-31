@@ -43,6 +43,17 @@ target("remote_desk_server")
     add_includedirs("../../src/interface")
     -- add_links("avformat", "swscale")
 
+target("remote_desk_client")
+    set_kind("binary")
+    add_deps("projectx")
+    add_packages("log")
+    add_packages("ffmpeg")
+    add_packages("vcpkg::sdl2")
+    add_files("remote_desk_client/*.cpp")
+    add_includedirs("../../src/interface")
+    add_links("SDL2-static", "SDL2main", "Shell32", "gdi32", "winmm", 
+        "setupapi", "version", "WindowsApp", "Imm32", "avutil")
+
 -- target("remote_desk")
 --     set_kind("binary")
 --     add_deps("projectx")

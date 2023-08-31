@@ -8,7 +8,7 @@ extern "C" {
 #include <libswscale/swscale.h>
 };
 
-#define NV12_BUFFER_SIZE 2560 * 1440 * 3 / 2
+#define NV12_BUFFER_SIZE 1280 * 720 * 3 / 2
 
 RemoteDeskServer ::RemoteDeskServer() {}
 
@@ -23,14 +23,14 @@ int BGRAToNV12FFmpeg(unsigned char *src_buffer, int width, int height,
                      unsigned char *dst_buffer) {
   AVFrame *Input_pFrame = av_frame_alloc();
   AVFrame *Output_pFrame = av_frame_alloc();
-  struct SwsContext *img_convert_ctx = sws_getContext(
-      width, height, AV_PIX_FMT_BGRA, width, height, AV_PIX_FMT_NV12,
-      SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
+  struct SwsContext *img_convert_ctx =
+      sws_getContext(width, height, AV_PIX_FMT_BGRA, 1280, 720, AV_PIX_FMT_NV12,
+                     SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
 
   av_image_fill_arrays(Input_pFrame->data, Input_pFrame->linesize, src_buffer,
                        AV_PIX_FMT_BGRA, width, height, 1);
   av_image_fill_arrays(Output_pFrame->data, Output_pFrame->linesize, dst_buffer,
-                       AV_PIX_FMT_NV12, width, height, 1);
+                       AV_PIX_FMT_NV12, 1280, 720, 1);
 
   sws_scale(img_convert_ctx, (uint8_t const **)Input_pFrame->data,
             Input_pFrame->linesize, 0, height, Output_pFrame->data,
@@ -85,7 +85,7 @@ int RemoteDeskServer::Init() {
         BGRAToNV12FFmpeg(data, width, height, (unsigned char *)nv12_buffer_);
         SendData(peer, DATA_TYPE::VIDEO, (const char *)nv12_buffer_,
                  NV12_BUFFER_SIZE);
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // std::this_thread::sleep_for(std::chrono::milliseconds(30));
       });
 
   screen_capture->Start();
