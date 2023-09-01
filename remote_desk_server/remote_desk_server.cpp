@@ -103,14 +103,22 @@ int RemoteDeskServer::Init() {
   rect.right = GetSystemMetrics(SM_CXSCREEN);
   rect.bottom = GetSystemMetrics(SM_CYSCREEN);
 
+  last_frame_time_ = std::chrono::high_resolution_clock::now();
   screen_capture->Init(
       rect, 60,
       [this](unsigned char *data, int size, int width, int height) -> void {
         // std::cout << "Send" << std::endl;
-        BGRAToNV12FFmpeg(data, width, height, (unsigned char *)nv12_buffer_);
-        SendData(peer, DATA_TYPE::VIDEO, (const char *)nv12_buffer_,
-                 NV12_BUFFER_SIZE);
-        // std::this_thread::sleep_for(std::chrono::milliseconds(30));
+
+        auto now_time = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration = now_time - last_frame_time_;
+        auto tc = duration.count() * 1000;
+
+        if (tc >= 0) {
+          BGRAToNV12FFmpeg(data, width, height, (unsigned char *)nv12_buffer_);
+          SendData(peer, DATA_TYPE::VIDEO, (const char *)nv12_buffer_,
+                   NV12_BUFFER_SIZE);
+          last_frame_time_ = now_time;
+        }
       });
 
   screen_capture->Start();

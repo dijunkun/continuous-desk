@@ -20,6 +20,7 @@ class RemoteDeskServer {
   ScreenCaptureWgc* screen_capture = nullptr;
 
   char* nv12_buffer_ = nullptr;
+  std::chrono::steady_clock::time_point last_frame_time_;
 };
 
 #endif
