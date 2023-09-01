@@ -1,5 +1,10 @@
 #include "remote_desk_server.h"
 
+#ifdef _WIN32
+#include <Winsock2.h>
+#include <iphlpapi.h>
+#endif
+
 #include <iostream>
 
 extern "C" {
@@ -52,6 +57,26 @@ void RemoteDeskServer::HostReceiveBuffer(const char *data, size_t size,
   std::cout << "Receive: [" << user << "] " << msg << std::endl;
 }
 
+std::string GetMac() {
+  IP_ADAPTER_INFO adapterInfo[16];
+  DWORD bufferSize = sizeof(adapterInfo);
+  char mac[10];
+  int len = 0;
+
+  DWORD result = GetAdaptersInfo(adapterInfo, &bufferSize);
+  if (result == ERROR_SUCCESS) {
+    PIP_ADAPTER_INFO adapter = adapterInfo;
+    while (adapter) {
+      for (UINT i = 0; i < adapter->AddressLength; i++) {
+        len += sprintf(mac + len, "%.2X", adapter->Address[i]);
+      }
+      break;
+    }
+  }
+
+  return mac;
+}
+
 int RemoteDeskServer::Init() {
   Params params;
   params.cfg_path = "../../../../config/config.ini";
@@ -64,7 +89,7 @@ int RemoteDeskServer::Init() {
   };
 
   std::string transmission_id = "000000";
-  std::string user_id = "Server";
+  std::string user_id = "Server-" + GetMac();
   peer = CreatePeer(&params);
   CreateConnection(peer, transmission_id.c_str(), user_id.c_str());
 
