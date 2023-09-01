@@ -12,6 +12,7 @@ if is_os("windows") then
     add_ldflags("/SUBSYSTEM:CONSOLE")
     add_links("Shell32", "windowsapp", "dwmapi", "User32", "kernel32")
     add_requires("vcpkg::sdl2 2.26.4")
+    add_requires("vcpkg::ffmpeg 5.1.2", {configs = {shared = false}})
 elseif is_os("linux") then
     add_requires("ffmpeg 5.1.2", {system = false})
     add_links("pthread")
@@ -36,21 +37,21 @@ target("screen_capture")
 
 target("remote_desk_server")
     set_kind("binary")
-    add_packages("log", "ffmpeg")
+    add_packages("log", "vcpkg::ffmpeg")
     add_deps("projectx", "screen_capture")
     add_files("remote_desk_server/*.cpp")
     add_includedirs("../../src/interface")
     add_links("swscale", "avutil")
     add_defines("WIN32_LEAN_AND_MEAN")
-    if is_os("windows") then
-        add_links("iphlpapi")
-        add_includedirs("../../thirdparty/ffmpeg/include")
-        if is_mode("debug") then
-            add_linkdirs("../../thirdparty/ffmpeg/lib/debug/win")
-        else
-            add_linkdirs("../../thirdparty/ffmpeg/lib/release/win")
-        end
-    end 
+    -- if is_os("windows") then
+    --     add_links("iphlpapi")
+    --     add_includedirs("../../thirdparty/ffmpeg/include")
+    --     if is_mode("debug") then
+    --         add_linkdirs("../../thirdparty/ffmpeg/lib/debug/win")
+    --     else
+    --         add_linkdirs("../../thirdparty/ffmpeg/lib/release/win")
+    --     end
+    -- end 
 
 target("remote_desk_client")
     set_kind("binary")
