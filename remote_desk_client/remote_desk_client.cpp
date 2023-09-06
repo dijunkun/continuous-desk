@@ -100,6 +100,7 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
 
 void GuestReceiveBuffer(const char *data, size_t size, const char *user_id,
                         size_t user_id_size) {
+  std::cout << "Receive: [" << user_id << "] " << std::endl;
   memcpy(dst_buffer, data, size);
 
   SDL_Event event;
