@@ -130,7 +130,7 @@ std::string GetMac() {
 
 int main() {
   Params params;
-  params.cfg_path = "config.ini";
+  params.cfg_path = "../../../../config/config.ini";
   params.on_receive_buffer = GuestReceiveBuffer;
 
   std::string transmission_id = "000000";
