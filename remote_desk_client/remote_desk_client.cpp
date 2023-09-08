@@ -44,16 +44,16 @@ inline void FreshVideo() {
   SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, &sdlRect);
   SDL_RenderPresent(sdlRenderer);
 
-  frame_count++;
-  end_time = SDL_GetTicks();
-  elapsed_time = end_time - start_time;
-  if (elapsed_time >= 1000) {
-    fps = frame_count / (elapsed_time / 1000);
-    frame_count = 0;
-    window_title = "Remote Desk Client [FPS " + std::to_string(fps) + "]";
-    SDL_SetWindowTitle(screen, window_title.data());
-    start_time = end_time;
-  }
+  // frame_count++;
+  // end_time = SDL_GetTicks();
+  // elapsed_time = end_time - start_time;
+  // if (elapsed_time >= 1000) {
+  //   fps = frame_count / (elapsed_time / 1000);
+  //   frame_count = 0;
+  //   window_title = "Remote Desk Client [FPS " + std::to_string(fps) + "]";
+  //   SDL_SetWindowTitle(screen, window_title.data());
+  //   start_time = end_time;
+  // }
 }
 
 inline int ProcessMouseKeyEven(SDL_Event &ev) {
@@ -106,6 +106,16 @@ void GuestReceiveBuffer(const char *data, size_t size, const char *user_id,
   SDL_Event event;
   event.type = REFRESH_EVENT;
   SDL_PushEvent(&event);
+  frame_count++;
+  end_time = SDL_GetTicks();
+  elapsed_time = end_time - start_time;
+  if (elapsed_time >= 1000) {
+    fps = frame_count / (elapsed_time / 1000);
+    frame_count = 0;
+    window_title = "Remote Desk Client [FPS " + std::to_string(fps) + "]";
+    SDL_SetWindowTitle(screen, window_title.data());
+    start_time = end_time;
+  }
 }
 
 std::string GetMac() {
