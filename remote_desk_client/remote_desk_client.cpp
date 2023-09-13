@@ -32,6 +32,14 @@ std::string window_title = "Remote Desk Client";
 #define QUIT_EVENT (SDL_USEREVENT + 2)
 
 int thread_exit = 0;
+PeerPtr *peer = nullptr;
+
+typedef struct {
+  SDL_KeyCode key;
+  SDL_EventType action;
+  int px;
+  int py;
+} RemoteAction;
 
 inline void FreshVideo() {
   sdlRect.x = 0;
@@ -43,50 +51,60 @@ inline void FreshVideo() {
   SDL_RenderClear(sdlRenderer);
   SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, &sdlRect);
   SDL_RenderPresent(sdlRenderer);
-
-  // frame_count++;
-  // end_time = SDL_GetTicks();
-  // elapsed_time = end_time - start_time;
-  // if (elapsed_time >= 1000) {
-  //   fps = frame_count / (elapsed_time / 1000);
-  //   frame_count = 0;
-  //   window_title = "Remote Desk Client [FPS " + std::to_string(fps) + "]";
-  //   SDL_SetWindowTitle(screen, window_title.data());
-  //   start_time = end_time;
-  // }
 }
 
 inline int ProcessMouseKeyEven(SDL_Event &ev) {
+  RemoteAction remote_action;
+  remote_action.key = SDL_KeyCode(ev.key.keysym.sym);
+  remote_action.action = SDL_EventType(ev.type);
+  remote_action.px = ev.button.x;
+  remote_action.py = ev.button.y;
+
+  SendData(peer, DATA_TYPE::DATA, (const char *)&remote_action,
+           sizeof(remote_action));
+
   if (SDL_KEYDOWN == ev.type)  // SDL_KEYUP
   {
+    printf("SDLK_DOWN: %d\n", SDL_KeyCode(ev.key.keysym.sym));
     if (SDLK_DOWN == ev.key.keysym.sym) {
-      printf("SDLK_DOWN ...............\n");
+      printf("SDLK_DOWN  \n");
 
     } else if (SDLK_UP == ev.key.keysym.sym) {
-      printf("SDLK_UP ...............\n");
+      printf("SDLK_UP  \n");
 
     } else if (SDLK_LEFT == ev.key.keysym.sym) {
-      printf("SDLK_LEFT ...............\n");
+      printf("SDLK_LEFT  \n");
 
     } else if (SDLK_RIGHT == ev.key.keysym.sym) {
-      printf("SDLK_RIGHT ...............\n");
+      printf("SDLK_RIGHT  \n");
     }
   } else if (SDL_MOUSEBUTTONDOWN == ev.type) {
     if (SDL_BUTTON_LEFT == ev.button.button) {
       int px = ev.button.x;
       int py = ev.button.y;
-      printf("SDL_MOUSEBUTTONDOWN x, y %d %d ...............\n", px, py);
+      printf("SDL_MOUSEBUTTONDOWN x, y %d %d  \n", px, py);
 
     } else if (SDL_BUTTON_RIGHT == ev.button.button) {
       int px = ev.button.x;
       int py = ev.button.y;
-      printf("SDL_BUTTON_RIGHT x, y %d %d ...............\n", px, py);
+      printf("SDL_BUTTON_RIGHT x, y %d %d  \n", px, py);
+    }
+  } else if (SDL_MOUSEBUTTONUP == ev.type) {
+    if (SDL_BUTTON_LEFT == ev.button.button) {
+      int px = ev.button.x;
+      int py = ev.button.y;
+      printf("SDL_MOUSEBUTTONUP x, y %d %d  \n", px, py);
+
+    } else if (SDL_BUTTON_RIGHT == ev.button.button) {
+      int px = ev.button.x;
+      int py = ev.button.y;
+      printf("SDL_MOUSEBUTTONUP x, y %d %d  \n", px, py);
     }
   } else if (SDL_MOUSEMOTION == ev.type) {
     int px = ev.motion.x;
     int py = ev.motion.y;
 
-    printf("SDL_MOUSEMOTION x, y %d %d ...............\n", px, py);
+    printf("SDL_MOUSEMOTION x, y %d %d  \n", px, py);
   } else if (SDL_QUIT == ev.type) {
     SDL_Event event;
     event.type = SDL_QUIT;
@@ -146,7 +164,7 @@ int main() {
   std::string transmission_id = "000000";
   std::string user_id = GetMac();
 
-  PeerPtr *peer = CreatePeer(&params);
+  peer = CreatePeer(&params);
   JoinConnection(peer, transmission_id.c_str(), user_id.c_str());
 
   if (SDL_Init(SDL_INIT_VIDEO)) {
