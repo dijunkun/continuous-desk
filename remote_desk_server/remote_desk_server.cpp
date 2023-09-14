@@ -3,9 +3,15 @@
 #ifdef _WIN32
 #include <Winsock2.h>
 #include <iphlpapi.h>
+#include <windows.h>
 #endif
 
+#define SDL_MAIN_HANDLED
+
+#include <fstream>
 #include <iostream>
+
+#include "SDL2/SDL.h"
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -14,6 +20,31 @@ extern "C" {
 };
 
 #define NV12_BUFFER_SIZE 1280 * 720 * 3 / 2
+
+int screen_w = 0;
+int screen_h = 0;
+
+typedef enum { mouse = 0, keyboard } ControlType;
+typedef enum { move = 0, left_down, left_up, right_down, right_up } MouseFlag;
+typedef enum { key_down = 0, key_up } KeyFlag;
+typedef struct {
+  long x;
+  long y;
+  MouseFlag flag;
+} Mouse;
+
+typedef struct {
+  long key_value;
+  KeyFlag flag;
+} Key;
+
+typedef struct {
+  ControlType type;
+  union {
+    Mouse m;
+    Key k;
+  };
+} RemoteAction;
 
 RemoteDeskServer ::RemoteDeskServer() {}
 
@@ -48,13 +79,52 @@ int BGRAToNV12FFmpeg(unsigned char *src_buffer, int width, int height,
   return 0;
 }
 
-void RemoteDeskServer::HostReceiveBuffer(const char *data, size_t size,
-                                         const char *user_id,
-                                         size_t user_id_size) {
+void RemoteDeskServer::ReceiveVideoBuffer(const char *data, size_t size,
+                                          const char *user_id,
+                                          size_t user_id_size) {
   std::string msg(data, size);
   std::string user(user_id, user_id_size);
 
   std::cout << "Receive: [" << user << "] " << msg << std::endl;
+}
+
+void RemoteDeskServer::ReceiveAudioBuffer(const char *data, size_t size,
+                                          const char *user_id,
+                                          size_t user_id_size) {}
+
+void RemoteDeskServer::ReceiveDataBuffer(const char *data, size_t size,
+                                         const char *user_id,
+                                         size_t user_id_size) {
+  std::string user(user_id, user_id_size);
+
+  RemoteAction remote_action;
+  memcpy(&remote_action, data, sizeof(remote_action));
+
+  INPUT ip;
+
+  if (remote_action.type == ControlType::mouse) {
+    ip.type = INPUT_MOUSE;
+    ip.mi.dx = remote_action.m.x * screen_w / 1280;
+    ip.mi.dy = remote_action.m.y * screen_h / 720;
+    if (remote_action.m.flag == MouseFlag::left_down) {
+      ip.mi.dwFlags = MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_ABSOLUTE;
+    } else if (remote_action.m.flag == MouseFlag::left_up) {
+      ip.mi.dwFlags = MOUSEEVENTF_LEFTUP | MOUSEEVENTF_ABSOLUTE;
+    } else if (remote_action.m.flag == MouseFlag::right_down) {
+      ip.mi.dwFlags = MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_ABSOLUTE;
+    } else if (remote_action.m.flag == MouseFlag::right_up) {
+      ip.mi.dwFlags = MOUSEEVENTF_RIGHTUP | MOUSEEVENTF_ABSOLUTE;
+    }
+    ip.mi.mouseData = 0;
+    ip.mi.time = 0;
+
+    // Send the press
+    SendInput(1, &ip, sizeof(INPUT));
+
+    std::cout << "Receive data from [" << user << "],  " << ip.type << " "
+              << ip.mi.dwFlags << " " << ip.mi.dx << " " << ip.mi.dy
+              << std::endl;
+  }
 }
 
 std::string GetMac() {
@@ -78,17 +148,16 @@ std::string GetMac() {
 }
 
 int RemoteDeskServer::Init() {
+  std::string default_cfg_path = "../../../../config/config.ini";
+  std::ifstream f(default_cfg_path.c_str());
+
   Params params;
-  params.cfg_path = "../../../../config/config.ini";
-  params.on_receive_buffer = [](const char *data, size_t size,
-                                const char *user_id, size_t user_id_size) {
-    // std::string msg(data, size);
-    // std::string user(user_id, user_id_size);
+  params.cfg_path = f.good() ? "../../../../config/config.ini" : "config.ini";
+  params.on_receive_video_buffer = ReceiveVideoBuffer;
+  params.on_receive_audio_buffer = ReceiveAudioBuffer;
+  params.on_receive_data_buffer = ReceiveDataBuffer;
 
-    // std::cout << "Receive: [" << user << "] " << msg << std::endl;
-  };
-
-  std::string transmission_id = "000000";
+  std::string transmission_id = "000001";
   std::string user_id = "Server-" + GetMac();
   peer = CreatePeer(&params);
   CreateConnection(peer, transmission_id.c_str(), user_id.c_str());
@@ -102,6 +171,9 @@ int RemoteDeskServer::Init() {
   rect.top = 0;
   rect.right = GetSystemMetrics(SM_CXSCREEN);
   rect.bottom = GetSystemMetrics(SM_CYSCREEN);
+
+  screen_w = GetSystemMetrics(SM_CXSCREEN);
+  screen_h = GetSystemMetrics(SM_CYSCREEN);
 
   last_frame_time_ = std::chrono::high_resolution_clock::now();
   screen_capture->Init(

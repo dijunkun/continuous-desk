@@ -4,6 +4,7 @@
 #endif
 
 #include <chrono>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -34,11 +35,26 @@ std::string window_title = "Remote Desk Client";
 int thread_exit = 0;
 PeerPtr *peer = nullptr;
 
+typedef enum { mouse = 0, keyboard } ControlType;
+typedef enum { move = 0, left_down, left_up, right_down, right_up } MouseFlag;
+typedef enum { key_down = 0, key_up } KeyFlag;
 typedef struct {
-  SDL_KeyCode key;
-  SDL_EventType action;
-  int px;
-  int py;
+  long x;
+  long y;
+  MouseFlag flag;
+} Mouse;
+
+typedef struct {
+  long key_value;
+  KeyFlag flag;
+} Key;
+
+typedef struct {
+  ControlType type;
+  union {
+    Mouse m;
+    Key k;
+  };
 } RemoteAction;
 
 inline void FreshVideo() {
@@ -55,13 +71,6 @@ inline void FreshVideo() {
 
 inline int ProcessMouseKeyEven(SDL_Event &ev) {
   RemoteAction remote_action;
-  remote_action.key = SDL_KeyCode(ev.key.keysym.sym);
-  remote_action.action = SDL_EventType(ev.type);
-  remote_action.px = ev.button.x;
-  remote_action.py = ev.button.y;
-
-  SendData(peer, DATA_TYPE::DATA, (const char *)&remote_action,
-           sizeof(remote_action));
 
   if (SDL_KEYDOWN == ev.type)  // SDL_KEYUP
   {
@@ -84,10 +93,20 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
       int py = ev.button.y;
       printf("SDL_MOUSEBUTTONDOWN x, y %d %d  \n", px, py);
 
+      remote_action.type = ControlType::mouse;
+      remote_action.m.flag = MouseFlag::left_down;
+      remote_action.m.x = ev.button.x;
+      remote_action.m.y = ev.button.y;
+
     } else if (SDL_BUTTON_RIGHT == ev.button.button) {
       int px = ev.button.x;
       int py = ev.button.y;
       printf("SDL_BUTTON_RIGHT x, y %d %d  \n", px, py);
+
+      remote_action.type = ControlType::mouse;
+      remote_action.m.flag = MouseFlag::right_down;
+      remote_action.m.x = ev.button.x;
+      remote_action.m.y = ev.button.y;
     }
   } else if (SDL_MOUSEBUTTONUP == ev.type) {
     if (SDL_BUTTON_LEFT == ev.button.button) {
@@ -95,16 +114,31 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
       int py = ev.button.y;
       printf("SDL_MOUSEBUTTONUP x, y %d %d  \n", px, py);
 
+      remote_action.type = ControlType::mouse;
+      remote_action.m.flag = MouseFlag::left_up;
+      remote_action.m.x = ev.button.x;
+      remote_action.m.y = ev.button.y;
+
     } else if (SDL_BUTTON_RIGHT == ev.button.button) {
       int px = ev.button.x;
       int py = ev.button.y;
       printf("SDL_MOUSEBUTTONUP x, y %d %d  \n", px, py);
+
+      remote_action.type = ControlType::mouse;
+      remote_action.m.flag = MouseFlag::right_up;
+      remote_action.m.x = ev.button.x;
+      remote_action.m.y = ev.button.y;
     }
   } else if (SDL_MOUSEMOTION == ev.type) {
     int px = ev.motion.x;
     int py = ev.motion.y;
 
     printf("SDL_MOUSEMOTION x, y %d %d  \n", px, py);
+
+    remote_action.type = ControlType::mouse;
+    remote_action.m.flag = MouseFlag::move;
+    remote_action.m.x = ev.button.x;
+    remote_action.m.y = ev.button.y;
   } else if (SDL_QUIT == ev.type) {
     SDL_Event event;
     event.type = SDL_QUIT;
@@ -113,10 +147,15 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
     return 0;
   }
 
+  SendData(peer, DATA_TYPE::DATA, (const char *)&remote_action,
+           sizeof(remote_action));
+  // std::cout << remote_action.type << " " << remote_action.type << " "
+  //           << remote_action.px << " " << remote_action.py << std::endl;
+
   return 0;
 }
 
-void GuestReceiveBuffer(const char *data, size_t size, const char *user_id,
+void ReceiveVideoBuffer(const char *data, size_t size, const char *user_id,
                         size_t user_id_size) {
   // std::cout << "Receive: [" << user_id << "] " << std::endl;
   memcpy(dst_buffer, data, size);
@@ -134,6 +173,18 @@ void GuestReceiveBuffer(const char *data, size_t size, const char *user_id,
     SDL_SetWindowTitle(screen, window_title.data());
     start_time = end_time;
   }
+}
+
+void ReceiveAudioBuffer(const char *data, size_t size, const char *user_id,
+                        size_t user_id_size) {
+  std::cout << "Receive audio, size " << size << ", user [" << user_id << "] "
+            << std::endl;
+}
+
+void ReceiveDataBuffer(const char *data, size_t size, const char *user_id,
+                       size_t user_id_size) {
+  std::cout << "Receive data, size " << size << ", user [" << user_id << "] "
+            << std::endl;
 }
 
 std::string GetMac() {
@@ -157,11 +208,16 @@ std::string GetMac() {
 }
 
 int main() {
-  Params params;
-  params.cfg_path = "../../../../config/config.ini";
-  params.on_receive_buffer = GuestReceiveBuffer;
+  std::string default_cfg_path = "../../../../config/config.ini";
+  std::ifstream f(default_cfg_path.c_str());
 
-  std::string transmission_id = "000000";
+  Params params;
+  params.cfg_path = f.good() ? "../../../../config/config.ini" : "config.ini";
+  params.on_receive_video_buffer = ReceiveVideoBuffer;
+  params.on_receive_audio_buffer = ReceiveAudioBuffer;
+  params.on_receive_data_buffer = ReceiveDataBuffer;
+
+  std::string transmission_id = "000001";
   std::string user_id = GetMac();
 
   peer = CreatePeer(&params);
@@ -199,7 +255,18 @@ int main() {
       if (event.type == REFRESH_EVENT) {
         FreshVideo();
       } else if (event.type == SDL_WINDOWEVENT) {
-        SDL_GetWindowSize(screen, &screen_w, &screen_h);
+        int new_screen_w = 0;
+        int new_screen_h = 0;
+        SDL_GetWindowSize(screen, &new_screen_w, &new_screen_h);
+
+        if (new_screen_w != screen_w) {
+          screen_w = new_screen_w;
+          screen_h = new_screen_w * 9 / 16;
+        } else if (new_screen_h != screen_h) {
+          screen_w = new_screen_h * 16 / 9;
+          screen_h = new_screen_h;
+        }
+        SDL_SetWindowSize(screen, screen_w, screen_h);
         printf("Resize windows: %dx%d\n", screen_w, screen_h);
       } else if (event.type == SDL_QUIT) {
         return 0;

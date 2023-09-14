@@ -12,7 +12,11 @@ class RemoteDeskServer {
  public:
   int Init();
 
-  static void HostReceiveBuffer(const char* data, size_t size,
+  static void ReceiveVideoBuffer(const char* data, size_t size,
+                                 const char* user_id, size_t user_id_size);
+  static void ReceiveAudioBuffer(const char* data, size_t size,
+                                 const char* user_id, size_t user_id_size);
+  static void ReceiveDataBuffer(const char* data, size_t size,
                                 const char* user_id, size_t user_id_size);
 
  private:

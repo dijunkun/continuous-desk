@@ -37,27 +37,22 @@ target("screen_capture")
 
 target("remote_desk_server")
     set_kind("binary")
-    add_packages("log", "vcpkg::ffmpeg")
+    add_packages("log", "vcpkg::ffmpeg", "vcpkg::sdl2")
     add_deps("projectx", "screen_capture")
     add_files("remote_desk_server/*.cpp")
     add_includedirs("../../src/interface")
     add_links("swscale", "avutil")
     add_defines("WIN32_LEAN_AND_MEAN")
-    -- if is_os("windows") then
-    --     add_links("iphlpapi")
-    --     add_includedirs("../../thirdparty/ffmpeg/include")
-    --     if is_mode("debug") then
-    --         add_linkdirs("../../thirdparty/ffmpeg/lib/debug/win")
-    --     else
-    --         add_linkdirs("../../thirdparty/ffmpeg/lib/release/win")
-    --     end
-    -- end 
+        if is_os("windows") then
+        add_links("SDL2-static", "SDL2main", "gdi32", "winmm", 
+        "setupapi", "version", "Imm32", "iphlpapi")
+    end
+
 
 target("remote_desk_client")
     set_kind("binary")
     add_deps("projectx")
     add_packages("log")
-    add_packages("ffmpeg")
     add_packages("vcpkg::sdl2")
     add_files("remote_desk_client/*.cpp")
     add_includedirs("../../src/interface")
