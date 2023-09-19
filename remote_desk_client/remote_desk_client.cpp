@@ -1,6 +1,12 @@
 #ifdef _WIN32
 #include <Winsock2.h>
 #include <iphlpapi.h>
+#elif __APPLE__
+#include <ifaddrs.h>
+#include <net/if_dl.h>
+#include <net/if_types.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 #endif
 
 #include <chrono>
@@ -67,6 +73,18 @@ inline void FreshVideo() {
   SDL_RenderClear(sdlRenderer);
   SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, &sdlRect);
   SDL_RenderPresent(sdlRenderer);
+
+  frame_count++;
+  end_time = SDL_GetTicks();
+  elapsed_time = end_time - start_time;
+  if (elapsed_time >= 1000) {
+    fps = frame_count / (elapsed_time / 1000);
+    frame_count = 0;
+    window_title = "Remote Desk Client FPS [" + std::to_string(fps) + "]";
+    // For MacOS, UI frameworks can only be called from the main thread
+    SDL_SetWindowTitle(screen, window_title.c_str());
+    start_time = end_time;
+  }
 }
 
 inline int ProcessMouseKeyEven(SDL_Event &ev) {
@@ -163,16 +181,6 @@ void ReceiveVideoBuffer(const char *data, size_t size, const char *user_id,
   SDL_Event event;
   event.type = REFRESH_EVENT;
   SDL_PushEvent(&event);
-  frame_count++;
-  end_time = SDL_GetTicks();
-  elapsed_time = end_time - start_time;
-  if (elapsed_time >= 1000) {
-    fps = frame_count / (elapsed_time / 1000);
-    frame_count = 0;
-    window_title = "Remote Desk Client [FPS " + std::to_string(fps) + "]";
-    SDL_SetWindowTitle(screen, window_title.data());
-    start_time = end_time;
-  }
 }
 
 void ReceiveAudioBuffer(const char *data, size_t size, const char *user_id,
@@ -187,24 +195,50 @@ void ReceiveDataBuffer(const char *data, size_t size, const char *user_id,
             << std::endl;
 }
 
-std::string GetMac() {
+std::string GetMac(char *mac_addr) {
+  int len = 0;
+#ifdef _WIN32
   IP_ADAPTER_INFO adapterInfo[16];
   DWORD bufferSize = sizeof(adapterInfo);
-  char mac[10];
-  int len = 0;
 
   DWORD result = GetAdaptersInfo(adapterInfo, &bufferSize);
   if (result == ERROR_SUCCESS) {
     PIP_ADAPTER_INFO adapter = adapterInfo;
     while (adapter) {
       for (UINT i = 0; i < adapter->AddressLength; i++) {
-        len += sprintf(mac + len, "%.2X", adapter->Address[i]);
+        len += sprintf(mac_addr + len, "%.2X", adapter->Address[i]);
       }
       break;
     }
   }
+#else
+  std::string ifName = "en0";
 
-  return mac;
+  struct ifaddrs *addrs;
+  struct ifaddrs *cursor;
+  const struct sockaddr_dl *dlAddr;
+
+  if (!getifaddrs(&addrs)) {
+    cursor = addrs;
+    while (cursor != 0) {
+      const struct sockaddr_dl *socAddr =
+          (const struct sockaddr_dl *)cursor->ifa_addr;
+      if ((cursor->ifa_addr->sa_family == AF_LINK) &&
+          (socAddr->sdl_type == IFT_ETHER) &&
+          strcmp("en0", cursor->ifa_name) == 0) {
+        dlAddr = (const struct sockaddr_dl *)cursor->ifa_addr;
+        const unsigned char *base =
+            (const unsigned char *)&dlAddr->sdl_data[dlAddr->sdl_nlen];
+        for (int i = 0; i < dlAddr->sdl_alen; i++) {
+          len += sprintf(mac_addr + len, "%.2X", base[i]);
+        }
+      }
+      cursor = cursor->ifa_next;
+    }
+    freeifaddrs(addrs);
+  }
+#endif
+  return mac_addr;
 }
 
 int main() {
@@ -218,7 +252,8 @@ int main() {
   params.on_receive_data_buffer = ReceiveDataBuffer;
 
   std::string transmission_id = "000001";
-  std::string user_id = GetMac();
+  char mac_addr[10];
+  std::string user_id = "C-" + std::string(GetMac(mac_addr));
 
   peer = CreatePeer(&params);
   JoinConnection(peer, transmission_id.c_str(), user_id.c_str());

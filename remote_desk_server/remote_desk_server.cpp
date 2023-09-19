@@ -127,24 +127,50 @@ void RemoteDeskServer::ReceiveDataBuffer(const char *data, size_t size,
   }
 }
 
-std::string GetMac() {
+std::string GetMac(char *mac_addr) {
+  int len = 0;
+#ifdef _WIN32
   IP_ADAPTER_INFO adapterInfo[16];
   DWORD bufferSize = sizeof(adapterInfo);
-  char mac[10];
-  int len = 0;
 
   DWORD result = GetAdaptersInfo(adapterInfo, &bufferSize);
   if (result == ERROR_SUCCESS) {
     PIP_ADAPTER_INFO adapter = adapterInfo;
     while (adapter) {
       for (UINT i = 0; i < adapter->AddressLength; i++) {
-        len += sprintf(mac + len, "%.2X", adapter->Address[i]);
+        len += sprintf(mac_addr + len, "%.2X", adapter->Address[i]);
       }
       break;
     }
   }
+#else
+  std::string ifName = "en0";
 
-  return mac;
+  struct ifaddrs *addrs;
+  struct ifaddrs *cursor;
+  const struct sockaddr_dl *dlAddr;
+
+  if (!getifaddrs(&addrs)) {
+    cursor = addrs;
+    while (cursor != 0) {
+      const struct sockaddr_dl *socAddr =
+          (const struct sockaddr_dl *)cursor->ifa_addr;
+      if ((cursor->ifa_addr->sa_family == AF_LINK) &&
+          (socAddr->sdl_type == IFT_ETHER) &&
+          strcmp("en0", cursor->ifa_name) == 0) {
+        dlAddr = (const struct sockaddr_dl *)cursor->ifa_addr;
+        const unsigned char *base =
+            (const unsigned char *)&dlAddr->sdl_data[dlAddr->sdl_nlen];
+        for (int i = 0; i < dlAddr->sdl_alen; i++) {
+          len += sprintf(mac_addr + len, "%.2X", base[i]);
+        }
+      }
+      cursor = cursor->ifa_next;
+    }
+    freeifaddrs(addrs);
+  }
+#endif
+  return mac_addr;
 }
 
 int RemoteDeskServer::Init() {
@@ -158,7 +184,8 @@ int RemoteDeskServer::Init() {
   params.on_receive_data_buffer = ReceiveDataBuffer;
 
   std::string transmission_id = "000001";
-  std::string user_id = "Server-" + GetMac();
+  char mac_addr[10];
+  std::string user_id = "S-" + std::string(GetMac(mac_addr));
   peer = CreatePeer(&params);
   CreateConnection(peer, transmission_id.c_str(), user_id.c_str());
 
