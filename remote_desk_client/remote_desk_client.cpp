@@ -11,9 +11,8 @@
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
-#endif
-
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstring>
