@@ -17,8 +17,8 @@ if is_os("windows") then
     add_requires("vcpkg::ffmpeg 5.1.2", {configs = {shared = false}})
 elseif is_os("linux") then
     add_requires("ffmpeg 5.1.2", {system = false})
-    add_links("pthread")
     set_config("cxxflags", "-fPIC")
+    add_syslinks("pthread", "dl")
 elseif is_os("macosx") then
     add_requires("ffmpeg 5.1.2", {system = false})
     -- add_requires("vcpkg::sdl2 2.28.3", {system = false})
@@ -69,7 +69,9 @@ target("remote_desk_client")
     if is_os("windows") then
         add_links("SDL2-static", "SDL2main", "gdi32", "winmm", 
         "setupapi", "version", "Imm32", "iphlpapi")
-    elseif is_os("macosx") or is_os("linux") then
+    elseif is_os("macosx") then
+        add_links("SDL2")
+    elseif is_os("linux") then
         add_links("SDL2")
     end
     
