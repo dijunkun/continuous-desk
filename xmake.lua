@@ -60,8 +60,7 @@ target("remote_desk_client")
     add_packages("log")
     if is_os("windows") then
         add_packages("vcpkg::sdl2")
-    elseif is_os("macosx") then
-        -- add_packages("vcpkg::sdl2")
+    elseif is_os("macosx") or is_os("linux")then
         add_packages("sdl2")
         add_packages("ffmpeg")
     end
@@ -70,7 +69,7 @@ target("remote_desk_client")
     if is_os("windows") then
         add_links("SDL2-static", "SDL2main", "gdi32", "winmm", 
         "setupapi", "version", "Imm32", "iphlpapi")
-    elseif is_os("macosx") then
+    elseif is_os("macosx") or is_os("linux") then
         add_links("SDL2")
     end
     

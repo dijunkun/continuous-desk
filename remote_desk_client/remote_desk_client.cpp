@@ -7,9 +7,16 @@
 #include <net/if_types.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#elif __linux__
+#include <net/if.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
 #endif
 
+#include <unistd.h>
+
 #include <chrono>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -211,8 +218,8 @@ std::string GetMac(char *mac_addr) {
       break;
     }
   }
-#else
-  std::string ifName = "en0";
+#elif __APPLE__
+  std::string if_name = "en0";
 
   struct ifaddrs *addrs;
   struct ifaddrs *cursor;
@@ -225,7 +232,7 @@ std::string GetMac(char *mac_addr) {
           (const struct sockaddr_dl *)cursor->ifa_addr;
       if ((cursor->ifa_addr->sa_family == AF_LINK) &&
           (socAddr->sdl_type == IFT_ETHER) &&
-          strcmp("en0", cursor->ifa_name) == 0) {
+          strcmp(if_name, cursor->ifa_name) == 0) {
         dlAddr = (const struct sockaddr_dl *)cursor->ifa_addr;
         const unsigned char *base =
             (const unsigned char *)&dlAddr->sdl_data[dlAddr->sdl_nlen];
@@ -237,6 +244,40 @@ std::string GetMac(char *mac_addr) {
     }
     freeifaddrs(addrs);
   }
+#elif __linux__
+  int sock = socket(AF_INET, SOCK_DGRAM, 0);
+  if (sock < 0) {
+    return "";
+  }
+  struct ifreq ifr;
+  struct ifconf ifc;
+  char buf[1024];
+  ifc.ifc_len = sizeof(buf);
+  ifc.ifc_buf = buf;
+  if (ioctl(sock, SIOCGIFCONF, &ifc) < 0) {
+    close(sock);
+    return "";
+  }
+  struct ifreq *it = ifc.ifc_req;
+  const struct ifreq *const end = it + (ifc.ifc_len / sizeof(struct ifreq));
+  for (; it != end; ++it) {
+    std::strcpy(ifr.ifr_name, it->ifr_name);
+    if (ioctl(sock, SIOCGIFFLAGS, &ifr) < 0) {
+      continue;
+    }
+    if (ifr.ifr_flags & IFF_LOOPBACK) {
+      continue;
+    }
+    if (ioctl(sock, SIOCGIFHWADDR, &ifr) < 0) {
+      continue;
+    }
+    std::string mac_address;
+    for (int i = 0; i < 6; ++i) {
+      len += sprintf(mac_addr + len, "%.2X", ifr.ifr_hwaddr.sa_data[i] & 0xff);
+    }
+    break;
+  }
+  close(sock);
 #endif
   return mac_addr;
 }
