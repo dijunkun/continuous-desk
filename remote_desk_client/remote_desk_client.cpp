@@ -94,6 +94,8 @@ inline void FreshVideo() {
 }
 
 inline int ProcessMouseKeyEven(SDL_Event &ev) {
+  float ratio = 1280.0 / screen_w;
+
   RemoteAction remote_action;
 
   if (SDL_KEYDOWN == ev.type)  // SDL_KEYUP
@@ -119,8 +121,8 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
 
       remote_action.type = ControlType::mouse;
       remote_action.m.flag = MouseFlag::left_down;
-      remote_action.m.x = ev.button.x;
-      remote_action.m.y = ev.button.y;
+      remote_action.m.x = ev.button.x * ratio;
+      remote_action.m.y = ev.button.y * ratio;
 
     } else if (SDL_BUTTON_RIGHT == ev.button.button) {
       int px = ev.button.x;
@@ -129,8 +131,8 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
 
       remote_action.type = ControlType::mouse;
       remote_action.m.flag = MouseFlag::right_down;
-      remote_action.m.x = ev.button.x;
-      remote_action.m.y = ev.button.y;
+      remote_action.m.x = ev.button.x * ratio;
+      remote_action.m.y = ev.button.y * ratio;
     }
   } else if (SDL_MOUSEBUTTONUP == ev.type) {
     if (SDL_BUTTON_LEFT == ev.button.button) {
@@ -140,8 +142,8 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
 
       remote_action.type = ControlType::mouse;
       remote_action.m.flag = MouseFlag::left_up;
-      remote_action.m.x = ev.button.x;
-      remote_action.m.y = ev.button.y;
+      remote_action.m.x = ev.button.x * ratio;
+      remote_action.m.y = ev.button.y * ratio;
 
     } else if (SDL_BUTTON_RIGHT == ev.button.button) {
       int px = ev.button.x;
@@ -150,8 +152,8 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
 
       remote_action.type = ControlType::mouse;
       remote_action.m.flag = MouseFlag::right_up;
-      remote_action.m.x = ev.button.x;
-      remote_action.m.y = ev.button.y;
+      remote_action.m.x = ev.button.x * ratio;
+      remote_action.m.y = ev.button.y * ratio;
     }
   } else if (SDL_MOUSEMOTION == ev.type) {
     int px = ev.motion.x;
@@ -161,8 +163,8 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
 
     remote_action.type = ControlType::mouse;
     remote_action.m.flag = MouseFlag::move;
-    remote_action.m.x = ev.button.x;
-    remote_action.m.y = ev.button.y;
+    remote_action.m.x = ev.button.x * ratio;
+    remote_action.m.y = ev.button.y * ratio;
   } else if (SDL_QUIT == ev.type) {
     SDL_Event event;
     event.type = SDL_QUIT;
