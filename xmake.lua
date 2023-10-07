@@ -13,7 +13,6 @@ add_requires("sdl2", {system = false})
 if is_os("windows") then
     add_ldflags("/SUBSYSTEM:CONSOLE")
     add_links("Shell32", "windowsapp", "dwmapi", "User32", "kernel32")
-    add_requires("vcpkg::sdl2 2.26.4")
     add_requires("vcpkg::ffmpeg 5.1.2", {configs = {shared = false}})
 elseif is_os("linux") then
     add_requires("ffmpeg 5.1.2", {system = false})
@@ -21,7 +20,6 @@ elseif is_os("linux") then
     add_syslinks("pthread", "dl")
 elseif is_os("macosx") then
     add_requires("ffmpeg 5.1.2", {system = false})
-    -- add_requires("vcpkg::sdl2 2.28.3", {system = false})
 end
 
 add_packages("spdlog")
@@ -42,7 +40,7 @@ target("screen_capture")
 
 target("remote_desk_server")
     set_kind("binary")
-    add_packages("log", "vcpkg::ffmpeg", "vcpkg::sdl2")
+    add_packages("log", "vcpkg::ffmpeg", "sdl2")
     add_deps("projectx", "screen_capture")
     add_files("remote_desk_server/*.cpp")
     add_includedirs("../../src/interface")
@@ -59,7 +57,7 @@ target("remote_desk_client")
     add_deps("projectx")
     add_packages("log")
     if is_os("windows") then
-        add_packages("vcpkg::sdl2")
+        add_packages("sdl2")
     elseif is_os("macosx") or is_os("linux")then
         add_packages("sdl2")
         add_packages("ffmpeg")
