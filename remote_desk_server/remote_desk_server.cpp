@@ -28,13 +28,13 @@ typedef enum { mouse = 0, keyboard } ControlType;
 typedef enum { move = 0, left_down, left_up, right_down, right_up } MouseFlag;
 typedef enum { key_down = 0, key_up } KeyFlag;
 typedef struct {
-  long x;
-  long y;
+  size_t x;
+  size_t y;
   MouseFlag flag;
 } Mouse;
 
 typedef struct {
-  long key_value;
+  size_t key_value;
   KeyFlag flag;
 } Key;
 
