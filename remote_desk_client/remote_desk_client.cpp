@@ -231,7 +231,7 @@ std::string GetMac(char *mac_addr) {
           (const struct sockaddr_dl *)cursor->ifa_addr;
       if ((cursor->ifa_addr->sa_family == AF_LINK) &&
           (socAddr->sdl_type == IFT_ETHER) &&
-          strcmp(if_name, cursor->ifa_name) == 0) {
+          strcmp(if_name.c_str(), cursor->ifa_name) == 0) {
         dlAddr = (const struct sockaddr_dl *)cursor->ifa_addr;
         const unsigned char *base =
             (const unsigned char *)&dlAddr->sdl_data[dlAddr->sdl_nlen];
