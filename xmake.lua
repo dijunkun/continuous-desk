@@ -6,6 +6,7 @@ add_rules("mode.release", "mode.debug")
 set_languages("c++17")
 
 add_requires("spdlog 1.11.0", {system = false})
+add_requires("imgui 1.89.9", {system = false}, {configs = {sdl2 = true}})
 add_defines("UNICODE")
 
 add_requires("sdl2", {system = false})
@@ -24,13 +25,13 @@ end
 
 add_packages("spdlog")
 
-includes("../../thirdparty")
+includes("thirdparty")
 
 target("log")
     set_kind("headeronly")
     add_packages("spdlog")
-    add_headerfiles("../../src/log/log.h")
-    add_includedirs("../../src/log", {public = true})
+    add_headerfiles("../utils/log/log.h")
+    add_includedirs("../utils/log", {public = true})
 
 target("screen_capture")
     set_kind("static")
@@ -74,16 +75,16 @@ target("remote_desk_client")
     end
     
 
--- target("remote_desk")
---     set_kind("binary")
---     add_deps("projectx")
---     add_packages("log")
---     add_packages("ffmpeg")
---     add_packages("vcpkg::sdl2")
---     add_links("avfilter", "avdevice", "avformat", "avcodec", "swscale", "swresample", "avutil")
---     add_files("**.cpp")
---     add_includedirs("../../src/interface")
---     add_links("SDL2-static", "SDL2main", "Shell32", "gdi32", "winmm", 
---         "setupapi", "version", "WindowsApp", "Imm32", "avutil")
-
-
+target("remote_desk_gui")
+    set_kind("binary")
+    add_deps("projectx")
+    add_packages("log", "imgui", "sdl2")
+    add_files("remote_desk_gui/*.cpp")
+    if is_os("windows") then
+        add_links("SDL2-static", "SDL2main", "gdi32", "winmm", 
+        "setupapi", "version", "Imm32", "iphlpapi")
+    elseif is_os("macosx") then
+        add_links("SDL2")
+    elseif is_os("linux") then
+        add_links("SDL2")
+    end
