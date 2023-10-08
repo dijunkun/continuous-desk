@@ -80,6 +80,7 @@ target("remote_desk_gui")
     add_deps("projectx")
     add_packages("log", "imgui", "sdl2")
     add_files("remote_desk_gui/*.cpp")
+    add_includedirs("../../src/interface")
     if is_os("windows") then
         add_links("SDL2-static", "SDL2main", "gdi32", "winmm", 
         "setupapi", "version", "Imm32", "iphlpapi")

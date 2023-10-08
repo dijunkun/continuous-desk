@@ -119,9 +119,9 @@ void RemoteDeskServer::ReceiveDataBuffer(const char *data, size_t size,
     ip.mi.time = 0;
 
     // Set cursor pos
-    SetCursorPos(ip.mi.dx, ip.mi.dy);
+    // SetCursorPos(ip.mi.dx, ip.mi.dy);
     // Send the press
-    SendInput(1, &ip, sizeof(INPUT));
+    // SendInput(1, &ip, sizeof(INPUT));
 
     std::cout << "Receive data from [" << user << "], " << ip.type << " "
               << ip.mi.dwFlags << " " << ip.mi.dx << " " << ip.mi.dy
