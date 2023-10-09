@@ -49,6 +49,8 @@ std::string window_title = "Remote Desk Client";
 
 int thread_exit = 0;
 PeerPtr *peer = nullptr;
+bool joined = false;
+bool received_frame = false;
 
 typedef enum { mouse = 0, keyboard } ControlType;
 typedef enum { move = 0, left_down, left_up, right_down, right_up } MouseFlag;
@@ -71,30 +73,6 @@ typedef struct {
     Key k;
   };
 } RemoteAction;
-
-inline void FreshVideo() {
-  sdlRect.x = 0;
-  sdlRect.y = 0;
-  sdlRect.w = screen_w;
-  sdlRect.h = screen_h;
-
-  SDL_UpdateTexture(sdlTexture, NULL, dst_buffer, pixel_w);
-  SDL_RenderClear(sdlRenderer);
-  SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, &sdlRect);
-  SDL_RenderPresent(sdlRenderer);
-
-  frame_count++;
-  end_time = SDL_GetTicks();
-  elapsed_time = end_time - start_time;
-  if (elapsed_time >= 1000) {
-    fps = frame_count / (elapsed_time / 1000);
-    frame_count = 0;
-    window_title = "Remote Desk Client FPS [" + std::to_string(fps) + "]";
-    // For MacOS, UI frameworks can only be called from the main thread
-    SDL_SetWindowTitle(window, window_title.c_str());
-    start_time = end_time;
-  }
-}
 
 inline int ProcessMouseKeyEven(SDL_Event &ev) {
   float ratio = 1280.0 / screen_w;
@@ -192,6 +170,7 @@ void ReceiveVideoBuffer(const char *data, size_t size, const char *user_id,
   SDL_Event event;
   event.type = REFRESH_EVENT;
   SDL_PushEvent(&event);
+  received_frame = true;
 }
 
 void ReceiveAudioBuffer(const char *data, size_t size, const char *user_id,
@@ -302,7 +281,7 @@ int main() {
   std::string user_id = "C-" + std::string(GetMac(mac_addr));
 
   peer = CreatePeer(&params);
-  JoinConnection(peer, transmission_id.c_str(), user_id.c_str());
+  // JoinConnection(peer, transmission_id.c_str(), user_id.c_str());
 
   // Setup SDL
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) !=
@@ -377,11 +356,15 @@ int main() {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
       ImGui_ImplSDL2_ProcessEvent(&event);
-      if (event.type == SDL_QUIT) done = true;
-      if (event.type == SDL_WINDOWEVENT &&
-          event.window.event == SDL_WINDOWEVENT_CLOSE &&
-          event.window.windowID == SDL_GetWindowID(window))
+      if (event.type == SDL_QUIT) {
         done = true;
+      } else if (event.type == SDL_WINDOWEVENT &&
+                 event.window.event == SDL_WINDOWEVENT_CLOSE &&
+                 event.window.windowID == SDL_GetWindowID(window)) {
+        done = true;
+      } else {
+        ProcessMouseKeyEven(event);
+      }
     }
 
     // Start the Dear ImGui frame
@@ -392,101 +375,41 @@ int main() {
     ImGui::BeginMainMenuBar();
 
     if (ImGui::BeginMenu("Main Menu", true)) {
-      if (ImGui::MenuItem("Connect")) {
-        if (ImGui::Button("Button", ImVec2(100, 50))) {
-          LOG_ERROR("!!!!!!!!!!")
-        }
-        ImGui::SameLine();
+      if (ImGui::MenuItem("Connect") && !joined) {
+        JoinConnection(peer, transmission_id.c_str(), user_id.c_str());
+        joined = true;
       }
       ImGui::Separator();
       if (ImGui::MenuItem("Disconnect")) {
+        LeaveConnection(peer);
+        joined = false;
       }
       ImGui::EndMenu();
     }
 
-    ImGui::Separator();
+    // ImGui::Separator();
 
-    if (ImGui::BeginMenu("Second Menu", true)) {
-      if (ImGui::MenuItem("Item 1", "item 1")) {
-      }
-      ImGui::Separator();
-      if (ImGui::MenuItem("Item 2", "item 2")) {
-      }
-      ImGui::EndMenu();
-    }
+    // if (ImGui::BeginMenu("Second Menu", true)) {
+    //   if (ImGui::MenuItem("Item 1", "item 1")) {
+    //   }
+    //   ImGui::Separator();
+    //   if (ImGui::MenuItem("Item 2", "item 2")) {
+    //   }
+    //   ImGui::EndMenu();
+    // }
 
-    ImGui::Separator();
+    // ImGui::Separator();
 
-    if (ImGui::BeginMenu("Third Menu", true)) {
-      if (ImGui::MenuItem("Item 3", "item 3")) {
-      }
-      ImGui::Separator();
-      if (ImGui::MenuItem("Item 4", "item 4")) {
-      }
-      ImGui::EndMenu();
-    }
+    // if (ImGui::BeginMenu("Third Menu", true)) {
+    //   if (ImGui::MenuItem("Item 3", "item 3")) {
+    //   }
+    //   ImGui::Separator();
+    //   if (ImGui::MenuItem("Item 4", "item 4")) {
+    //   }
+    //   ImGui::EndMenu();
+    // }
 
     ImGui::EndMainMenuBar();
-
-    // 1. Show the big demo window (Most of the sample code is in
-    // ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear
-    // ImGui!).
-    // if (show_demo_window) ImGui::ShowDemoWindow(&show_demo_window);
-
-    // 2. Show a simple window that we create ourselves.We use a Begin /
-    //     End pair to create a named window.
-    // {
-    //   static float f = 0.0f;
-    //   static int counter = 0;
-
-    //   ImGui::Begin("Hello, world!", NULL,
-    //                ImGuiWindowFlags_NoCollapse);  // Create a window called
-    //                                               // "Hello, world!"
-    //                                               // and append into it.
-
-    //   ImGui::SetCursorPos(ImVec2(0, 0));
-    //   ImGui::SetWindowSize(ImVec2(500, 500));
-
-    //   ImGui::Text("This is some useful text.");  // Display some text (you
-    //   can
-    //                                              // use a format strings too)
-    //   ImGui::Checkbox(
-    //       "Demo Window",
-    //       &show_demo_window);  // Edit bools storing our window open/close
-    //       state
-    //   ImGui::Checkbox("Another Window", &show_another_window);
-
-    //   ImGui::SliderFloat(
-    //       "float", &f, 0.0f,
-    //       1.0f);  // Edit 1 float using a slider from 0.0f to 1.0f
-    //   ImGui::ColorEdit3(
-    //       "clear color",
-    //       (float *)&clear_color);  // Edit 3 floats representing a color
-
-    //   if (ImGui::Button(
-    //           "Button"))  // Buttons return true when clicked (most widgets
-    //                       // return true when edited/activated)
-    //     counter++;
-    //   ImGui::SameLine();
-    //   ImGui::Text("counter = %d", counter);
-
-    //   ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
-    //               1000.0f / io.Framerate, io.Framerate);
-    //   ImGui::End();
-    // }
-
-    // 3. Show another simple window.
-    // if (show_another_window) {
-    //   ImGui::Begin(
-    //       "Another Window",
-    //       &show_another_window);  // Pass a pointer to our bool variable (the
-    //                               // window will have a closing button that
-    //                               will
-    //                               // clear the bool when clicked)
-    //   ImGui::Text("Hello from another window!");
-    //   if (ImGui::Button("Close Me")) show_another_window = false;
-    //   ImGui::End();
-    // }
 
     // Rendering
     ImGui::Render();
@@ -500,7 +423,13 @@ int main() {
 
     SDL_UpdateTexture(sdlTexture, NULL, dst_buffer, pixel_w);
     SDL_RenderClear(sdlRenderer);
-    SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, &sdlRect);
+    if (!joined || !received_frame) {
+      SDL_SetRenderDrawColor(
+          sdlRenderer, (Uint8)(clear_color.x * 0), (Uint8)(clear_color.y * 0),
+          (Uint8)(clear_color.z * 0), (Uint8)(clear_color.w * 0));
+    } else {
+      SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, &sdlRect);
+    }
     ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData());
     SDL_RenderPresent(sdlRenderer);
 
