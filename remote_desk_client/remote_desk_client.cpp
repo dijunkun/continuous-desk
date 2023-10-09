@@ -175,8 +175,8 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
 
   SendData(peer, DATA_TYPE::DATA, (const char *)&remote_action,
            sizeof(remote_action));
-  // std::cout << remote_action.type << " " << remote_action.type << " "
-  //           << remote_action.px << " " << remote_action.py << std::endl;
+  std::cout << remote_action.type << " " << remote_action.m.flag << " "
+            << remote_action.m.x << " " << remote_action.m.y << std::endl;
 
   return 0;
 }

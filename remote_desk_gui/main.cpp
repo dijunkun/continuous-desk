@@ -105,6 +105,9 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
       remote_action.m.x = ev.button.x * ratio;
       remote_action.m.y = ev.button.y * ratio;
 
+      SendData(peer, DATA_TYPE::DATA, (const char *)&remote_action,
+               sizeof(remote_action));
+
     } else if (SDL_BUTTON_RIGHT == ev.button.button) {
       int px = ev.button.x;
       int py = ev.button.y;
@@ -114,6 +117,9 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
       remote_action.m.flag = MouseFlag::right_down;
       remote_action.m.x = ev.button.x * ratio;
       remote_action.m.y = ev.button.y * ratio;
+
+      SendData(peer, DATA_TYPE::DATA, (const char *)&remote_action,
+               sizeof(remote_action));
     }
   } else if (SDL_MOUSEBUTTONUP == ev.type) {
     if (SDL_BUTTON_LEFT == ev.button.button) {
@@ -126,6 +132,9 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
       remote_action.m.x = ev.button.x * ratio;
       remote_action.m.y = ev.button.y * ratio;
 
+      SendData(peer, DATA_TYPE::DATA, (const char *)&remote_action,
+               sizeof(remote_action));
+
     } else if (SDL_BUTTON_RIGHT == ev.button.button) {
       int px = ev.button.x;
       int py = ev.button.y;
@@ -135,6 +144,9 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
       remote_action.m.flag = MouseFlag::right_up;
       remote_action.m.x = ev.button.x * ratio;
       remote_action.m.y = ev.button.y * ratio;
+
+      SendData(peer, DATA_TYPE::DATA, (const char *)&remote_action,
+               sizeof(remote_action));
     }
   } else if (SDL_MOUSEMOTION == ev.type) {
     int px = ev.motion.x;
@@ -146,6 +158,9 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
     remote_action.m.flag = MouseFlag::move;
     remote_action.m.x = ev.button.x * ratio;
     remote_action.m.y = ev.button.y * ratio;
+
+    SendData(peer, DATA_TYPE::DATA, (const char *)&remote_action,
+             sizeof(remote_action));
   } else if (SDL_QUIT == ev.type) {
     SDL_Event event;
     event.type = SDL_QUIT;
@@ -153,11 +168,6 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
     printf("SDL_QUIT\n");
     return 0;
   }
-
-  SendData(peer, DATA_TYPE::DATA, (const char *)&remote_action,
-           sizeof(remote_action));
-  // std::cout << remote_action.type << " " << remote_action.type << " "
-  //           << remote_action.px << " " << remote_action.py << std::endl;
 
   return 0;
 }
@@ -344,29 +354,6 @@ int main() {
   // Main loop
   bool done = false;
   while (!done) {
-    // Poll and handle events (inputs, window resize, etc.)
-    // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to
-    // tell if dear imgui wants to use your inputs.
-    // - When io.WantCaptureMouse is true, do not dispatch mouse input data to
-    // your main application, or clear/overwrite your copy of the mouse data.
-    // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input
-    // data to your main application, or clear/overwrite your copy of the
-    // keyboard data. Generally you may always pass all inputs to dear imgui,
-    // and hide them from your application based on those two flags.
-    SDL_Event event;
-    while (SDL_PollEvent(&event)) {
-      ImGui_ImplSDL2_ProcessEvent(&event);
-      if (event.type == SDL_QUIT) {
-        done = true;
-      } else if (event.type == SDL_WINDOWEVENT &&
-                 event.window.event == SDL_WINDOWEVENT_CLOSE &&
-                 event.window.windowID == SDL_GetWindowID(window)) {
-        done = true;
-      } else {
-        ProcessMouseKeyEven(event);
-      }
-    }
-
     // Start the Dear ImGui frame
     ImGui_ImplSDLRenderer2_NewFrame();
     ImGui_ImplSDL2_NewFrame();
@@ -416,20 +403,53 @@ int main() {
     SDL_RenderSetScale(sdlRenderer, io.DisplayFramebufferScale.x,
                        io.DisplayFramebufferScale.y);
 
-    sdlRect.x = 0;
-    sdlRect.y = 0;
-    sdlRect.w = screen_w;
-    sdlRect.h = screen_h;
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+      ImGui_ImplSDL2_ProcessEvent(&event);
+      if (event.type == SDL_QUIT) {
+        done = true;
+      } else if (event.type == SDL_WINDOWEVENT &&
+                 event.window.event == SDL_WINDOWEVENT_RESIZED) {
+        int new_screen_w = 0;
+        int new_screen_h = 0;
+        SDL_GetWindowSize(window, &new_screen_w, &new_screen_h);
 
-    SDL_UpdateTexture(sdlTexture, NULL, dst_buffer, pixel_w);
-    SDL_RenderClear(sdlRenderer);
+        if (new_screen_w != screen_w) {
+          screen_w = new_screen_w;
+          screen_h = new_screen_w * 9 / 16;
+        } else if (new_screen_h != screen_h) {
+          screen_w = new_screen_h * 16 / 9;
+          screen_h = new_screen_h;
+        }
+        SDL_SetWindowSize(window, screen_w, screen_h);
+        printf("Resize windows: %dx%d\n", screen_w, screen_h);
+      } else if (event.type == SDL_WINDOWEVENT &&
+                 event.window.event == SDL_WINDOWEVENT_CLOSE &&
+                 event.window.windowID == SDL_GetWindowID(window)) {
+        done = true;
+      } else if (event.type == REFRESH_EVENT) {
+        sdlRect.x = 0;
+        sdlRect.y = 0;
+        sdlRect.w = screen_w;
+        sdlRect.h = screen_h;
+
+        SDL_UpdateTexture(sdlTexture, NULL, dst_buffer, pixel_w);
+        SDL_RenderClear(sdlRenderer);
+        SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, &sdlRect);
+      } else {
+        if (joined) {
+          ProcessMouseKeyEven(event);
+        }
+      }
+    }
+
     if (!joined || !received_frame) {
+      SDL_RenderClear(sdlRenderer);
       SDL_SetRenderDrawColor(
           sdlRenderer, (Uint8)(clear_color.x * 0), (Uint8)(clear_color.y * 0),
           (Uint8)(clear_color.z * 0), (Uint8)(clear_color.w * 0));
-    } else {
-      SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, &sdlRect);
     }
+
     ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData());
     SDL_RenderPresent(sdlRenderer);
 

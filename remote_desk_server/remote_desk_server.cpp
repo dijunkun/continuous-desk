@@ -100,6 +100,10 @@ void RemoteDeskServer::ReceiveDataBuffer(const char *data, size_t size,
   RemoteAction remote_action;
   memcpy(&remote_action, data, sizeof(remote_action));
 
+  std::cout << "remote_action: " << remote_action.type << " "
+            << remote_action.m.flag << " " << remote_action.m.x << " "
+            << remote_action.m.y << std::endl;
+
   INPUT ip;
 
   if (remote_action.type == ControlType::mouse) {
@@ -114,6 +118,8 @@ void RemoteDeskServer::ReceiveDataBuffer(const char *data, size_t size,
       ip.mi.dwFlags = MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_ABSOLUTE;
     } else if (remote_action.m.flag == MouseFlag::right_up) {
       ip.mi.dwFlags = MOUSEEVENTF_RIGHTUP | MOUSEEVENTF_ABSOLUTE;
+    } else {
+      ip.mi.dwFlags = MOUSEEVENTF_MOVE;
     }
     ip.mi.mouseData = 0;
     ip.mi.time = 0;
@@ -121,7 +127,9 @@ void RemoteDeskServer::ReceiveDataBuffer(const char *data, size_t size,
     // Set cursor pos
     SetCursorPos(ip.mi.dx, ip.mi.dy);
     // Send the press
-    SendInput(1, &ip, sizeof(INPUT));
+    if (ip.mi.dwFlags != MOUSEEVENTF_MOVE) {
+      SendInput(1, &ip, sizeof(INPUT));
+    }
 
     std::cout << "Receive data from [" << user << "], " << ip.type << " "
               << ip.mi.dwFlags << " " << ip.mi.dx << " " << ip.mi.dy
