@@ -291,7 +291,6 @@ int main() {
   std::string user_id = "C-" + std::string(GetMac(mac_addr));
 
   peer = CreatePeer(&params);
-  // JoinConnection(peer, transmission_id.c_str(), user_id.c_str());
 
   // Setup SDL
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) !=
@@ -359,44 +358,35 @@ int main() {
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
 
-    ImGui::BeginMainMenuBar();
+    {
+      static float f = 0.0f;
+      static int counter = 0;
 
-    if (ImGui::BeginMenu("Main Menu", true)) {
-      if (ImGui::MenuItem("Connect") && !joined) {
-        JoinConnection(peer, transmission_id.c_str(), user_id.c_str());
+      const ImGuiViewport *main_viewport = ImGui::GetMainViewport();
+      ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Once);
+      ImGui::SetNextWindowSize(ImVec2(160, 85));
+
+      ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoResize);
+
+      static char buf[10] = "";
+      ImGui::Text("ID:");
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(114);
+      ImGui::InputTextWithHint("", "000000", buf, IM_ARRAYSIZE(buf));
+
+      ImGui::Spacing();
+      if (ImGui::Button("Connect") && !joined) {
+        JoinConnection(peer, buf, user_id.c_str());
         joined = true;
       }
-      ImGui::Separator();
-      if (ImGui::MenuItem("Disconnect")) {
+      ImGui::SameLine();
+      if (ImGui::Button("Disconnect")) {
         LeaveConnection(peer);
         joined = false;
       }
-      ImGui::EndMenu();
+
+      ImGui::End();
     }
-
-    // ImGui::Separator();
-
-    // if (ImGui::BeginMenu("Second Menu", true)) {
-    //   if (ImGui::MenuItem("Item 1", "item 1")) {
-    //   }
-    //   ImGui::Separator();
-    //   if (ImGui::MenuItem("Item 2", "item 2")) {
-    //   }
-    //   ImGui::EndMenu();
-    // }
-
-    // ImGui::Separator();
-
-    // if (ImGui::BeginMenu("Third Menu", true)) {
-    //   if (ImGui::MenuItem("Item 3", "item 3")) {
-    //   }
-    //   ImGui::Separator();
-    //   if (ImGui::MenuItem("Item 4", "item 4")) {
-    //   }
-    //   ImGui::EndMenu();
-    // }
-
-    ImGui::EndMainMenuBar();
 
     // Rendering
     ImGui::Render();
@@ -410,18 +400,18 @@ int main() {
         done = true;
       } else if (event.type == SDL_WINDOWEVENT &&
                  event.window.event == SDL_WINDOWEVENT_RESIZED) {
-        int new_screen_w = 0;
-        int new_screen_h = 0;
-        SDL_GetWindowSize(window, &new_screen_w, &new_screen_h);
+        // int new_screen_w = 0;
+        // int new_screen_h = 0;
+        // SDL_GetWindowSize(window, &new_screen_w, &new_screen_h);
 
-        if (new_screen_w != screen_w) {
-          screen_w = new_screen_w;
-          screen_h = new_screen_w * 9 / 16;
-        } else if (new_screen_h != screen_h) {
-          screen_w = new_screen_h * 16 / 9;
-          screen_h = new_screen_h;
-        }
-        SDL_SetWindowSize(window, screen_w, screen_h);
+        // if (new_screen_w != screen_w) {
+        //   screen_w = new_screen_w;
+        //   screen_h = new_screen_w * 9 / 16;
+        // } else if (new_screen_h != screen_h) {
+        //   screen_w = new_screen_h * 16 / 9;
+        //   screen_h = new_screen_h;
+        // }
+        // SDL_SetWindowSize(window, screen_w, screen_h);
         printf("Resize windows: %dx%d\n", screen_w, screen_h);
       } else if (event.type == SDL_WINDOWEVENT &&
                  event.window.event == SDL_WINDOWEVENT_CLOSE &&

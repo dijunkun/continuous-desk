@@ -193,7 +193,7 @@ int RemoteDeskServer::Init() {
   params.on_receive_audio_buffer = ReceiveAudioBuffer;
   params.on_receive_data_buffer = ReceiveDataBuffer;
 
-  std::string transmission_id = "000001";
+  std::string transmission_id = "666666";
   char mac_addr[10];
   std::string user_id = "S-" + std::string(GetMac(mac_addr));
   peer = CreatePeer(&params);
