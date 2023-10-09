@@ -77,7 +77,7 @@ target("remote_desk_client")
 
 target("remote_desk_gui")
     set_kind("binary")
-    add_deps("projectx")
+    add_deps("projectx", "screen_capture")
     add_packages("log", "imgui", "sdl2")
     add_files("remote_desk_gui/*.cpp")
     add_includedirs("../../src/interface")

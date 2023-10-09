@@ -23,11 +23,20 @@
 #include <string>
 #include <thread>
 
+extern "C" {
+#include <libavformat/avformat.h>
+#include <libavutil/imgutils.h>
+#include <libswscale/swscale.h>
+};
+
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_sdlrenderer2.h"
 #include "log.h"
+#include "screen_capture_wgc.h"
 #include "x.h"
+
+#define NV12_BUFFER_SIZE 1280 * 720 * 3 / 2
 
 int screen_w = 1280, screen_h = 720;
 const int pixel_w = 1280, pixel_h = 720;
@@ -51,6 +60,11 @@ int thread_exit = 0;
 PeerPtr *peer = nullptr;
 bool joined = false;
 bool received_frame = false;
+
+ScreenCaptureWgc *screen_capture = nullptr;
+
+char *nv12_buffer_ = nullptr;
+std::chrono::steady_clock::time_point last_frame_time_;
 
 typedef enum { mouse = 0, keyboard } ControlType;
 typedef enum { move = 0, left_down, left_up, right_down, right_up } MouseFlag;
@@ -275,6 +289,30 @@ std::string GetMac(char *mac_addr) {
   return mac_addr;
 }
 
+int BGRAToNV12FFmpeg(unsigned char *src_buffer, int width, int height,
+                     unsigned char *dst_buffer) {
+  AVFrame *Input_pFrame = av_frame_alloc();
+  AVFrame *Output_pFrame = av_frame_alloc();
+  struct SwsContext *img_convert_ctx =
+      sws_getContext(width, height, AV_PIX_FMT_BGRA, 1280, 720, AV_PIX_FMT_NV12,
+                     SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
+
+  av_image_fill_arrays(Input_pFrame->data, Input_pFrame->linesize, src_buffer,
+                       AV_PIX_FMT_BGRA, width, height, 1);
+  av_image_fill_arrays(Output_pFrame->data, Output_pFrame->linesize, dst_buffer,
+                       AV_PIX_FMT_NV12, 1280, 720, 1);
+
+  sws_scale(img_convert_ctx, (uint8_t const **)Input_pFrame->data,
+            Input_pFrame->linesize, 0, height, Output_pFrame->data,
+            Output_pFrame->linesize);
+
+  if (Input_pFrame) av_free(Input_pFrame);
+  if (Output_pFrame) av_free(Output_pFrame);
+  if (img_convert_ctx) sws_freeContext(img_convert_ctx);
+
+  return 0;
+}
+
 int main() {
   LOG_INFO("Remote desk");
   std::string default_cfg_path = "../../../../config/config.ini";
@@ -288,7 +326,7 @@ int main() {
 
   std::string transmission_id = "000001";
   char mac_addr[10];
-  std::string user_id = "C-" + std::string(GetMac(mac_addr));
+  GetMac(mac_addr);
 
   peer = CreatePeer(&params);
 
@@ -364,25 +402,99 @@ int main() {
 
       const ImGuiViewport *main_viewport = ImGui::GetMainViewport();
       ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Once);
-      ImGui::SetNextWindowSize(ImVec2(160, 85));
+      ImGui::SetNextWindowSize(ImVec2(180, 185));
 
       ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoResize);
 
-      static char buf[10] = "";
-      ImGui::Text("ID:");
-      ImGui::SameLine();
-      ImGui::SetNextItemWidth(114);
-      ImGui::InputTextWithHint("", "000000", buf, IM_ARRAYSIZE(buf));
+      {
+        ImGui::Text("LOCAL  ID:");
+        ImGui::SameLine();
+
+        ImGui::Selectable(mac_addr, false,
+                          ImGuiSelectableFlags_AllowDoubleClick);
+
+        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+          ImGui::SetClipboardText(mac_addr);
+        }
+
+        ImGui::Spacing();
+        static bool buttonPressed = false;
+        static const char *label = "Online";
+
+        if (ImGui::Button(label)) {
+          std::string user_id = "S-" + std::string(GetMac(mac_addr));
+
+          if (strcmp(label, "Online") == 0) {
+            CreateConnection(peer, mac_addr, user_id.c_str());
+
+            nv12_buffer_ = new char[NV12_BUFFER_SIZE];
+
+            screen_capture = new ScreenCaptureWgc();
+
+            RECORD_DESKTOP_RECT rect;
+            rect.left = 0;
+            rect.top = 0;
+            rect.right = GetSystemMetrics(SM_CXSCREEN);
+            rect.bottom = GetSystemMetrics(SM_CYSCREEN);
+
+            screen_w = GetSystemMetrics(SM_CXSCREEN);
+            screen_h = GetSystemMetrics(SM_CYSCREEN);
+
+            last_frame_time_ = std::chrono::high_resolution_clock::now();
+            screen_capture->Init(
+                rect, 60,
+                [](unsigned char *data, int size, int width,
+                   int height) -> void {
+                  // std::cout << "Send" << std::endl;
+
+                  auto now_time = std::chrono::high_resolution_clock::now();
+                  std::chrono::duration<double> duration =
+                      now_time - last_frame_time_;
+                  auto tc = duration.count() * 1000;
+
+                  if (tc >= 0) {
+                    BGRAToNV12FFmpeg(data, width, height,
+                                     (unsigned char *)nv12_buffer_);
+                    SendData(peer, DATA_TYPE::VIDEO, (const char *)nv12_buffer_,
+                             NV12_BUFFER_SIZE);
+                    last_frame_time_ = now_time;
+                  }
+                });
+
+            screen_capture->Start();
+          } else {
+            LeaveConnection(peer);
+          }
+          buttonPressed = !buttonPressed;
+          label = buttonPressed ? "Offline" : "Online";
+        }
+      }
 
       ImGui::Spacing();
-      if (ImGui::Button("Connect") && !joined) {
-        JoinConnection(peer, buf, user_id.c_str());
-        joined = true;
-      }
-      ImGui::SameLine();
-      if (ImGui::Button("Disconnect")) {
-        LeaveConnection(peer);
-        joined = false;
+
+      ImGui::Separator();
+
+      ImGui::Spacing();
+
+      {
+        static char buf[20] = "";
+        ImGui::Text("REMOTE ID:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(114);
+        ImGui::InputTextWithHint("", "000000", buf, IM_ARRAYSIZE(buf),
+                                 ImGuiInputTextFlags_AllowTabInput);
+
+        ImGui::Spacing();
+        if (ImGui::Button("Connect") && !joined) {
+          std::string user_id = "C-" + std::string(GetMac(mac_addr));
+          JoinConnection(peer, buf, user_id.c_str());
+          joined = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Disconnect")) {
+          LeaveConnection(peer);
+          joined = false;
+        }
       }
 
       ImGui::End();
