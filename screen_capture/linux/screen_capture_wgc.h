@@ -1,15 +1,10 @@
 #ifndef _SCREEN_CAPTURE_WGC_H_
 #define _SCREEN_CAPTURE_WGC_H_
 
-#include <Windows.h>
-
 #include <atomic>
 #include <functional>
 #include <string>
 #include <thread>
-
-#include "wgc_session.h"
-#include "wgc_session_impl.h"
 
 typedef struct {
   int left;
@@ -21,7 +16,7 @@ typedef struct {
 typedef std::function<void(unsigned char *, int, int, int)> cb_desktop_data;
 typedef std::function<void(int)> cb_desktop_error;
 
-class ScreenCaptureWgc : public WgcSession::wgc_session_observer {
+class ScreenCaptureWgc {
  public:
   ScreenCaptureWgc();
   ~ScreenCaptureWgc();
@@ -36,14 +31,12 @@ class ScreenCaptureWgc : public WgcSession::wgc_session_observer {
   int Resume();
   int Stop();
 
-  void OnFrame(const WgcSession::wgc_session_frame &frame);
+  void OnFrame();
 
  protected:
   void CleanUp();
 
  private:
-  WgcSession *session_ = nullptr;
-
   std::atomic_bool _running;
   std::atomic_bool _paused;
   std::atomic_bool _inited;

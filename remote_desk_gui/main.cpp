@@ -215,7 +215,7 @@ void ReceiveDataBuffer(const char *data, size_t size, const char *user_id,
   std::cout << "remote_action: " << remote_action.type << " "
             << remote_action.m.flag << " " << remote_action.m.x << " "
             << remote_action.m.y << std::endl;
-
+#ifdef _WIN32
   INPUT ip;
 
   if (remote_action.type == ControlType::mouse) {
@@ -247,6 +247,7 @@ void ReceiveDataBuffer(const char *data, size_t size, const char *user_id,
               << ip.mi.dwFlags << " " << ip.mi.dx << " " << ip.mi.dy
               << std::endl;
   }
+#endif
 }
 
 std::string GetMac(char *mac_addr) {
@@ -470,7 +471,7 @@ int main() {
               CreateConnection(peer_server, mac_addr, user_id.c_str());
 
               nv12_buffer_ = new char[NV12_BUFFER_SIZE];
-
+#ifdef _WIN32
               screen_capture = new ScreenCaptureWgc();
 
               RECORD_DESKTOP_RECT rect;
@@ -504,6 +505,7 @@ int main() {
                   });
 
               screen_capture->Start();
+#endif
             } else {
               LeaveConnection(peer_server);
             }

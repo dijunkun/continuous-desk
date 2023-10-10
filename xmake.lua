@@ -35,44 +35,16 @@ target("log")
 target("screen_capture")
     set_kind("static")
     add_packages("log")
-    add_files("screen_capture/*.cpp")
-    add_includedirs("screen_capture", {public = true})
-
-target("remote_desk_server")
-    set_kind("binary")
-    add_packages("log", "vcpkg::ffmpeg", "sdl2")
-    add_deps("projectx", "screen_capture")
-    add_files("remote_desk_server/*.cpp")
-    add_includedirs("../../src/interface")
-    add_links("swscale", "avutil")
-    add_defines("WIN32_LEAN_AND_MEAN")
     if is_os("windows") then
-        add_links("SDL2-static", "SDL2main", "gdi32", "winmm", 
-        "setupapi", "version", "Imm32", "iphlpapi")
-    end
-
-
-target("remote_desk_client")
-    set_kind("binary")
-    add_deps("projectx")
-    add_packages("log")
-    if is_os("windows") then
-        add_packages("sdl2")
-    elseif is_os("macosx") or is_os("linux")then
-        add_packages("sdl2")
-        add_packages("ffmpeg")
-    end
-    add_files("remote_desk_client/*.cpp")
-    add_includedirs("../../src/interface")
-    if is_os("windows") then
-        add_links("SDL2-static", "SDL2main", "gdi32", "winmm", 
-        "setupapi", "version", "Imm32", "iphlpapi")
+        add_files("screen_capture/windows/*.cpp")
+        add_includedirs("screen_capture/windows", {public = true})
     elseif is_os("macosx") then
-        add_links("SDL2")
+         add_files("screen_capture/macosx/*.cpp")
+         add_includedirs("screen_capture/macosx", {public = true})
     elseif is_os("linux") then
-        add_links("SDL2")
+         add_files("screen_capture/linux/*.cpp")
+         add_includedirs("screen_capture/linux", {public = true})
     end
-    
 
 target("remote_desk_gui")
     set_kind("binary")

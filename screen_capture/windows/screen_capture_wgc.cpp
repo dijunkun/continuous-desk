@@ -1,5 +1,6 @@
 #include "screen_capture_wgc.h"
 
+#include <Windows.h>
 #include <d3d11_4.h>
 #include <winrt/Windows.Foundation.Metadata.h>
 #include <winrt/Windows.Graphics.Capture.h>
