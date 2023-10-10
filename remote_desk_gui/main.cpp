@@ -1,7 +1,8 @@
 #include <SDL.h>
 #include <stdio.h>
 #ifdef _WIN32
-#pragma comment(linker, "/subsystem:\"windows\" /entry:\"mainCRTStartup\"")
+// #pragma comment(linker, "/subsystem:\"windows\" /entry:\"mainCRTStartup\"")
+#pragma comment(linker, "/subsystem:\"console\"")
 #include <Winsock2.h>
 #include <iphlpapi.h>
 #elif __APPLE__
@@ -237,10 +238,10 @@ void ReceiveDataBuffer(const char *data, size_t size, const char *user_id,
     ip.mi.time = 0;
 
     // Set cursor pos
-    SetCursorPos(ip.mi.dx, ip.mi.dy);
+    // SetCursorPos(ip.mi.dx, ip.mi.dy);
     // Send the press
     if (ip.mi.dwFlags != MOUSEEVENTF_MOVE) {
-      SendInput(1, &ip, sizeof(INPUT));
+      // SendInput(1, &ip, sizeof(INPUT));
     }
 
     std::cout << "Receive data from [" << user << "], " << ip.type << " "
@@ -370,7 +371,12 @@ int main() {
   GetMac(mac_addr);
 
   peer_server = CreatePeer(&params);
+  std::string server_user_id = "S-" + std::string(GetMac(mac_addr));
+  Init(peer_server, server_user_id.c_str());
+
   peer_client = CreatePeer(&params);
+  std::string client_user_id = "C-" + std::string(GetMac(mac_addr));
+  Init(peer_client, client_user_id.c_str());
 
   // Setup SDL
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) !=
@@ -478,7 +484,7 @@ int main() {
             std::string user_id = "S-" + std::string(GetMac(mac_addr));
 
             if (strcmp(online_label, "Online") == 0) {
-              CreateConnection(peer_server, mac_addr, user_id.c_str());
+              CreateConnection(peer_server, mac_addr);
 
               nv12_buffer_ = new char[NV12_BUFFER_SIZE];
 #ifdef _WIN32
@@ -554,7 +560,7 @@ int main() {
             if (ImGui::Button(connect_label)) {
               if (strcmp(connect_label, "Connect") == 0 && !joined) {
                 std::string user_id = "C-" + std::string(GetMac(mac_addr));
-                JoinConnection(peer_client, buf, user_id.c_str());
+                JoinConnection(peer_client, buf);
                 joined = true;
               } else if (strcmp(connect_label, "Disconnect") == 0 && joined) {
                 LeaveConnection(peer_client);
