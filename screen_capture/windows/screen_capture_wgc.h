@@ -6,6 +6,9 @@
 #include <string>
 #include <thread>
 
+#include "wgc_session.h"
+#include "wgc_session_impl.h"
+
 typedef struct {
   int left;
   int top;
@@ -16,7 +19,7 @@ typedef struct {
 typedef std::function<void(unsigned char *, int, int, int)> cb_desktop_data;
 typedef std::function<void(int)> cb_desktop_error;
 
-class ScreenCaptureWgc {
+class ScreenCaptureWgc : public WgcSession::wgc_session_observer {
  public:
   ScreenCaptureWgc();
   ~ScreenCaptureWgc();
