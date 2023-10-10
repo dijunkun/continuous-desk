@@ -12,7 +12,6 @@ add_defines("UNICODE")
 add_requires("sdl2", {system = false})
 
 if is_os("windows") then
-    add_ldflags("/SUBSYSTEM:CONSOLE")
     add_links("Shell32", "windowsapp", "dwmapi", "User32", "kernel32")
     add_requires("vcpkg::ffmpeg 5.1.2", {configs = {shared = false}})
 elseif is_os("linux") then
@@ -47,7 +46,7 @@ target("remote_desk_server")
     add_includedirs("../../src/interface")
     add_links("swscale", "avutil")
     add_defines("WIN32_LEAN_AND_MEAN")
-        if is_os("windows") then
+    if is_os("windows") then
         add_links("SDL2-static", "SDL2main", "gdi32", "winmm", 
         "setupapi", "version", "Imm32", "iphlpapi")
     end

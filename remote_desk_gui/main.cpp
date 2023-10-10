@@ -1,6 +1,7 @@
 #include <SDL.h>
 #include <stdio.h>
 #ifdef _WIN32
+#pragma comment(linker, "/subsystem:\"windows\" /entry:\"mainCRTStartup\"")
 #include <Winsock2.h>
 #include <iphlpapi.h>
 #elif __APPLE__
@@ -57,7 +58,8 @@ std::string window_title = "Remote Desk Client";
 #define QUIT_EVENT (SDL_USEREVENT + 2)
 
 int thread_exit = 0;
-PeerPtr *peer = nullptr;
+PeerPtr *peer_server = nullptr;
+PeerPtr *peer_client = nullptr;
 bool joined = false;
 bool received_frame = false;
 
@@ -119,7 +121,7 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
       remote_action.m.x = ev.button.x * ratio;
       remote_action.m.y = ev.button.y * ratio;
 
-      SendData(peer, DATA_TYPE::DATA, (const char *)&remote_action,
+      SendData(peer_client, DATA_TYPE::DATA, (const char *)&remote_action,
                sizeof(remote_action));
 
     } else if (SDL_BUTTON_RIGHT == ev.button.button) {
@@ -132,7 +134,7 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
       remote_action.m.x = ev.button.x * ratio;
       remote_action.m.y = ev.button.y * ratio;
 
-      SendData(peer, DATA_TYPE::DATA, (const char *)&remote_action,
+      SendData(peer_client, DATA_TYPE::DATA, (const char *)&remote_action,
                sizeof(remote_action));
     }
   } else if (SDL_MOUSEBUTTONUP == ev.type) {
@@ -146,7 +148,7 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
       remote_action.m.x = ev.button.x * ratio;
       remote_action.m.y = ev.button.y * ratio;
 
-      SendData(peer, DATA_TYPE::DATA, (const char *)&remote_action,
+      SendData(peer_client, DATA_TYPE::DATA, (const char *)&remote_action,
                sizeof(remote_action));
 
     } else if (SDL_BUTTON_RIGHT == ev.button.button) {
@@ -159,7 +161,7 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
       remote_action.m.x = ev.button.x * ratio;
       remote_action.m.y = ev.button.y * ratio;
 
-      SendData(peer, DATA_TYPE::DATA, (const char *)&remote_action,
+      SendData(peer_client, DATA_TYPE::DATA, (const char *)&remote_action,
                sizeof(remote_action));
     }
   } else if (SDL_MOUSEMOTION == ev.type) {
@@ -173,7 +175,7 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
     remote_action.m.x = ev.button.x * ratio;
     remote_action.m.y = ev.button.y * ratio;
 
-    SendData(peer, DATA_TYPE::DATA, (const char *)&remote_action,
+    SendData(peer_client, DATA_TYPE::DATA, (const char *)&remote_action,
              sizeof(remote_action));
   } else if (SDL_QUIT == ev.type) {
     SDL_Event event;
@@ -205,8 +207,46 @@ void ReceiveAudioBuffer(const char *data, size_t size, const char *user_id,
 
 void ReceiveDataBuffer(const char *data, size_t size, const char *user_id,
                        size_t user_id_size) {
-  std::cout << "Receive data, size " << size << ", user [" << user_id << "] "
-            << std::endl;
+  std::string user(user_id, user_id_size);
+
+  RemoteAction remote_action;
+  memcpy(&remote_action, data, sizeof(remote_action));
+
+  std::cout << "remote_action: " << remote_action.type << " "
+            << remote_action.m.flag << " " << remote_action.m.x << " "
+            << remote_action.m.y << std::endl;
+
+  INPUT ip;
+
+  if (remote_action.type == ControlType::mouse) {
+    ip.type = INPUT_MOUSE;
+    ip.mi.dx = remote_action.m.x * screen_w / 1280;
+    ip.mi.dy = remote_action.m.y * screen_h / 720;
+    if (remote_action.m.flag == MouseFlag::left_down) {
+      ip.mi.dwFlags = MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_ABSOLUTE;
+    } else if (remote_action.m.flag == MouseFlag::left_up) {
+      ip.mi.dwFlags = MOUSEEVENTF_LEFTUP | MOUSEEVENTF_ABSOLUTE;
+    } else if (remote_action.m.flag == MouseFlag::right_down) {
+      ip.mi.dwFlags = MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_ABSOLUTE;
+    } else if (remote_action.m.flag == MouseFlag::right_up) {
+      ip.mi.dwFlags = MOUSEEVENTF_RIGHTUP | MOUSEEVENTF_ABSOLUTE;
+    } else {
+      ip.mi.dwFlags = MOUSEEVENTF_MOVE;
+    }
+    ip.mi.mouseData = 0;
+    ip.mi.time = 0;
+
+    // Set cursor pos
+    SetCursorPos(ip.mi.dx, ip.mi.dy);
+    // Send the press
+    if (ip.mi.dwFlags != MOUSEEVENTF_MOVE) {
+      SendInput(1, &ip, sizeof(INPUT));
+    }
+
+    std::cout << "Receive data from [" << user << "], " << ip.type << " "
+              << ip.mi.dwFlags << " " << ip.mi.dx << " " << ip.mi.dy
+              << std::endl;
+  }
 }
 
 std::string GetMac(char *mac_addr) {
@@ -328,7 +368,8 @@ int main() {
   char mac_addr[10];
   GetMac(mac_addr);
 
-  peer = CreatePeer(&params);
+  peer_server = CreatePeer(&params);
+  peer_client = CreatePeer(&params);
 
   // Setup SDL
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) !=
@@ -402,7 +443,7 @@ int main() {
 
       const ImGuiViewport *main_viewport = ImGui::GetMainViewport();
       ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Once);
-      ImGui::SetNextWindowSize(ImVec2(180, 185));
+      ImGui::SetNextWindowSize(ImVec2(180, 138));
 
       ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoResize);
 
@@ -418,82 +459,89 @@ int main() {
         }
 
         ImGui::Spacing();
-        static bool buttonPressed = false;
-        static const char *label = "Online";
+        {
+          static bool online_button_pressed = false;
+          static const char *online_label = "Online";
 
-        if (ImGui::Button(label)) {
-          std::string user_id = "S-" + std::string(GetMac(mac_addr));
+          if (ImGui::Button(online_label)) {
+            std::string user_id = "S-" + std::string(GetMac(mac_addr));
 
-          if (strcmp(label, "Online") == 0) {
-            CreateConnection(peer, mac_addr, user_id.c_str());
+            if (strcmp(online_label, "Online") == 0) {
+              CreateConnection(peer_server, mac_addr, user_id.c_str());
 
-            nv12_buffer_ = new char[NV12_BUFFER_SIZE];
+              nv12_buffer_ = new char[NV12_BUFFER_SIZE];
 
-            screen_capture = new ScreenCaptureWgc();
+              screen_capture = new ScreenCaptureWgc();
 
-            RECORD_DESKTOP_RECT rect;
-            rect.left = 0;
-            rect.top = 0;
-            rect.right = GetSystemMetrics(SM_CXSCREEN);
-            rect.bottom = GetSystemMetrics(SM_CYSCREEN);
+              RECORD_DESKTOP_RECT rect;
+              rect.left = 0;
+              rect.top = 0;
+              rect.right = GetSystemMetrics(SM_CXSCREEN);
+              rect.bottom = GetSystemMetrics(SM_CYSCREEN);
 
-            screen_w = GetSystemMetrics(SM_CXSCREEN);
-            screen_h = GetSystemMetrics(SM_CYSCREEN);
+              screen_w = GetSystemMetrics(SM_CXSCREEN);
+              screen_h = GetSystemMetrics(SM_CYSCREEN);
 
-            last_frame_time_ = std::chrono::high_resolution_clock::now();
-            screen_capture->Init(
-                rect, 60,
-                [](unsigned char *data, int size, int width,
-                   int height) -> void {
-                  // std::cout << "Send" << std::endl;
+              last_frame_time_ = std::chrono::high_resolution_clock::now();
+              screen_capture->Init(
+                  rect, 60,
+                  [](unsigned char *data, int size, int width,
+                     int height) -> void {
+                    // std::cout << "Send" << std::endl;
 
-                  auto now_time = std::chrono::high_resolution_clock::now();
-                  std::chrono::duration<double> duration =
-                      now_time - last_frame_time_;
-                  auto tc = duration.count() * 1000;
+                    auto now_time = std::chrono::high_resolution_clock::now();
+                    std::chrono::duration<double> duration =
+                        now_time - last_frame_time_;
+                    auto tc = duration.count() * 1000;
 
-                  if (tc >= 0) {
-                    BGRAToNV12FFmpeg(data, width, height,
-                                     (unsigned char *)nv12_buffer_);
-                    SendData(peer, DATA_TYPE::VIDEO, (const char *)nv12_buffer_,
-                             NV12_BUFFER_SIZE);
-                    last_frame_time_ = now_time;
-                  }
-                });
+                    if (tc >= 0) {
+                      BGRAToNV12FFmpeg(data, width, height,
+                                       (unsigned char *)nv12_buffer_);
+                      SendData(peer_server, DATA_TYPE::VIDEO,
+                               (const char *)nv12_buffer_, NV12_BUFFER_SIZE);
+                      last_frame_time_ = now_time;
+                    }
+                  });
 
-            screen_capture->Start();
-          } else {
-            LeaveConnection(peer);
+              screen_capture->Start();
+            } else {
+              LeaveConnection(peer_server);
+            }
+            online_button_pressed = !online_button_pressed;
+            online_label = online_button_pressed ? "Offline" : "Online";
           }
-          buttonPressed = !buttonPressed;
-          label = buttonPressed ? "Offline" : "Online";
         }
-      }
-
-      ImGui::Spacing();
-
-      ImGui::Separator();
-
-      ImGui::Spacing();
-
-      {
-        static char buf[20] = "";
-        ImGui::Text("REMOTE ID:");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(114);
-        ImGui::InputTextWithHint("", "000000", buf, IM_ARRAYSIZE(buf),
-                                 ImGuiInputTextFlags_AllowTabInput);
 
         ImGui::Spacing();
-        if (ImGui::Button("Connect") && !joined) {
-          std::string user_id = "C-" + std::string(GetMac(mac_addr));
-          JoinConnection(peer, buf, user_id.c_str());
-          joined = true;
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Disconnect")) {
-          LeaveConnection(peer);
-          joined = false;
+
+        ImGui::Separator();
+
+        ImGui::Spacing();
+        {
+          static bool connect_button_pressed = false;
+          static const char *connect_label = "Connect";
+          {
+            static char buf[20] = "";
+            ImGui::Text("REMOTE ID:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(114);
+            ImGui::InputTextWithHint("", "000000", buf, IM_ARRAYSIZE(buf),
+                                     ImGuiInputTextFlags_AllowTabInput);
+
+            ImGui::Spacing();
+            if (ImGui::Button(connect_label)) {
+              if (strcmp(connect_label, "Connect") == 0 && !joined) {
+                std::string user_id = "C-" + std::string(GetMac(mac_addr));
+                JoinConnection(peer_client, buf, user_id.c_str());
+                joined = true;
+              } else if (strcmp(connect_label, "Disconnect") == 0 && joined) {
+                LeaveConnection(peer_client);
+                joined = false;
+              }
+              connect_button_pressed = !connect_button_pressed;
+              connect_label = connect_button_pressed ? "Disconnect" : "Connect";
+            }
+          }
         }
       }
 
