@@ -444,12 +444,12 @@ int main() {
 
       const ImGuiViewport *main_viewport = ImGui::GetMainViewport();
       ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Once);
-      ImGui::SetNextWindowSize(ImVec2(180, 138));
+      ImGui::SetNextWindowSize(ImVec2(180, 200));
 
       ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoResize);
 
       {
-        ImGui::Text("LOCAL  ID:");
+        ImGui::Text("LOCAL ID: ");
         ImGui::SameLine();
 
         ImGui::Selectable(mac_addr, false,
@@ -458,6 +458,16 @@ int main() {
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
           ImGui::SetClipboardText(mac_addr);
         }
+
+        ImGui::Spacing();
+
+        ImGui::Text("PASSWORD: ");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(110);
+        static char server_password[20] = "";
+        ImGui::InputTextWithHint("server_password", "000001", server_password,
+                                 IM_ARRAYSIZE(server_password),
+                                 ImGuiInputTextFlags_AllowTabInput);
 
         ImGui::Spacing();
         {
@@ -526,11 +536,21 @@ int main() {
             static char buf[20] = "";
             ImGui::Text("REMOTE ID:");
             ImGui::SameLine();
-            ImGui::SetNextItemWidth(114);
-            ImGui::InputTextWithHint("", "000000", buf, IM_ARRAYSIZE(buf),
+            ImGui::SetNextItemWidth(110);
+            ImGui::InputTextWithHint("id_buf", "000002", buf, IM_ARRAYSIZE(buf),
                                      ImGuiInputTextFlags_AllowTabInput);
 
             ImGui::Spacing();
+
+            ImGui::Text("PASSWORD: ");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(110);
+            static char client_password[20] = "";
+            ImGui::InputTextWithHint("client_password", "000003",
+                                     client_password,
+                                     IM_ARRAYSIZE(client_password),
+                                     ImGuiInputTextFlags_AllowTabInput);
+
             if (ImGui::Button(connect_label)) {
               if (strcmp(connect_label, "Connect") == 0 && !joined) {
                 std::string user_id = "C-" + std::string(GetMac(mac_addr));
