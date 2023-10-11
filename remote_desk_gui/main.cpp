@@ -496,7 +496,7 @@ int main() {
             std::string user_id = "S-" + std::string(GetMac(mac_addr));
 
             if (strcmp(online_label, "Online") == 0) {
-              CreateConnection(peer_server, mac_addr);
+              CreateConnection(peer_server, mac_addr, server_password);
 
               nv12_buffer_ = new char[NV12_BUFFER_SIZE];
 #ifdef _WIN32
@@ -572,7 +572,7 @@ int main() {
             if (ImGui::Button(connect_label)) {
               if (strcmp(connect_label, "Connect") == 0 && !joined) {
                 std::string user_id = "C-" + std::string(GetMac(mac_addr));
-                JoinConnection(peer_client, remote_id);
+                JoinConnection(peer_client, remote_id, client_password);
                 joined = true;
               } else if (strcmp(connect_label, "Disconnect") == 0 && joined) {
                 LeaveConnection(peer_client);
