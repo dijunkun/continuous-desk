@@ -504,8 +504,6 @@ int main() {
                   rect, 60,
                   [](unsigned char *data, int size, int width,
                      int height) -> void {
-                    // std::cout << "Send" << std::endl;
-
                     auto now_time = std::chrono::high_resolution_clock::now();
                     std::chrono::duration<double> duration =
                         now_time - last_frame_time_;
@@ -516,6 +514,7 @@ int main() {
                                        (unsigned char *)nv12_buffer_);
                       SendData(peer_server, DATA_TYPE::VIDEO,
                                (const char *)nv12_buffer_, NV12_BUFFER_SIZE);
+                      // std::cout << "Send" << std::endl;
                       last_frame_time_ = now_time;
                     }
                   });
