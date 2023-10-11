@@ -46,7 +46,7 @@ target("screen_capture")
          add_includedirs("screen_capture/linux", {public = true})
     end
 
-target("remote_desk_gui")
+target("remote_desk")
     set_kind("binary")
     add_deps("projectx", "screen_capture")
     add_packages("log", "imgui", "sdl2")
