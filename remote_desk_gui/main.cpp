@@ -59,6 +59,7 @@ uint32_t start_time, end_time, elapsed_time;
 uint32_t frame_count = 0;
 int fps = 0;
 std::string window_title = "Remote Desk Client";
+std::string connection_status = "-";
 
 // Refresh Event
 #define REFRESH_EVENT (SDL_USEREVENT + 1)
@@ -69,6 +70,9 @@ PeerPtr *peer_server = nullptr;
 PeerPtr *peer_client = nullptr;
 bool joined = false;
 bool received_frame = false;
+
+static bool connect_button_pressed = false;
+static const char *connect_label = "Connect";
 
 ScreenCaptureWgc *screen_capture = nullptr;
 
@@ -258,6 +262,25 @@ void ReceiveDataBuffer(const char *data, size_t size, const char *user_id,
 #endif
 }
 
+void ConnectionStatus(ConnectionStatus status) {
+  if (ConnectionStatus::Connecting == status) {
+    connection_status = "Connecting";
+  } else if (ConnectionStatus::Connected == status) {
+    connection_status = "Connected";
+  } else if (ConnectionStatus::Failed == status) {
+    connection_status = "Failed";
+  } else if (ConnectionStatus::Closed == status) {
+    connection_status = "Closed";
+  } else if (ConnectionStatus::IncorrectPassword == status) {
+    connection_status = "Incorrect password";
+    if (connect_button_pressed) {
+      connect_button_pressed = false;
+      joined = false;
+      connect_label = connect_button_pressed ? "Disconnect" : "Connect";
+    }
+  }
+}
+
 std::string GetMac(char *mac_addr) {
   int len = 0;
 #ifdef _WIN32
@@ -372,6 +395,7 @@ int main() {
   params.on_receive_video_buffer = ReceiveVideoBuffer;
   params.on_receive_audio_buffer = ReceiveAudioBuffer;
   params.on_receive_data_buffer = ReceiveDataBuffer;
+  params.on_connection_status = ConnectionStatus;
 
   std::string transmission_id = "000001";
   char mac_addr[10];
@@ -549,8 +573,6 @@ int main() {
 
         ImGui::Spacing();
         {
-          static bool connect_button_pressed = false;
-          static const char *connect_label = "Connect";
           {
             static char remote_id[20] = "";
             if (strcmp(remote_id, "") == 0) {
@@ -583,6 +605,7 @@ int main() {
                 LeaveConnection(peer_client);
                 joined = false;
               }
+
               connect_button_pressed = !connect_button_pressed;
               connect_label = connect_button_pressed ? "Disconnect" : "Connect";
             }
@@ -662,7 +685,8 @@ int main() {
     if (elapsed_time >= 1000) {
       fps = frame_count / (elapsed_time / 1000);
       frame_count = 0;
-      window_title = "Remote Desk Client FPS [" + std::to_string(fps) + "]";
+      window_title = "Remote Desk Client FPS [" + std::to_string(fps) +
+                     "] status [" + connection_status + "]";
       // For MacOS, UI frameworks can only be called from the main thread
       SDL_SetWindowTitle(window, window_title.c_str());
       start_time = end_time;
