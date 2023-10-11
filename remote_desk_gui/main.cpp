@@ -39,7 +39,12 @@ extern "C" {
 #include "x.h"
 
 #define NV12_BUFFER_SIZE 1280 * 720 * 3 / 2
+
+#ifdef REMOTE_DESK_DEBUG
 #define MOUSE_CONTROL 0
+#else
+#define MOUSE_CONTROL 1
+#endif
 
 int screen_w = 1280, screen_h = 720;
 const int pixel_w = 1280, pixel_h = 720;

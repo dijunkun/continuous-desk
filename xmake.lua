@@ -22,6 +22,10 @@ elseif is_os("macosx") then
     add_requires("ffmpeg 5.1.2", {system = false})
 end
 
+if is_mode("debug") then
+    add_defines("REMOTE_DESK_DEBUG")
+end
+
 add_packages("spdlog")
 
 includes("thirdparty")
