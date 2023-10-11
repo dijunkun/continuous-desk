@@ -98,24 +98,24 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
 
   if (SDL_KEYDOWN == ev.type)  // SDL_KEYUP
   {
-    printf("SDLK_DOWN: %d\n", SDL_KeyCode(ev.key.keysym.sym));
+    // printf("SDLK_DOWN: %d\n", SDL_KeyCode(ev.key.keysym.sym));
     if (SDLK_DOWN == ev.key.keysym.sym) {
-      printf("SDLK_DOWN  \n");
+      // printf("SDLK_DOWN  \n");
 
     } else if (SDLK_UP == ev.key.keysym.sym) {
-      printf("SDLK_UP  \n");
+      // printf("SDLK_UP  \n");
 
     } else if (SDLK_LEFT == ev.key.keysym.sym) {
-      printf("SDLK_LEFT  \n");
+      // printf("SDLK_LEFT  \n");
 
     } else if (SDLK_RIGHT == ev.key.keysym.sym) {
-      printf("SDLK_RIGHT  \n");
+      // printf("SDLK_RIGHT  \n");
     }
   } else if (SDL_MOUSEBUTTONDOWN == ev.type) {
     if (SDL_BUTTON_LEFT == ev.button.button) {
       int px = ev.button.x;
       int py = ev.button.y;
-      printf("SDL_MOUSEBUTTONDOWN x, y %d %d  \n", px, py);
+      // printf("SDL_MOUSEBUTTONDOWN x, y %d %d  \n", px, py);
 
       remote_action.type = ControlType::mouse;
       remote_action.m.flag = MouseFlag::left_down;
@@ -128,7 +128,7 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
     } else if (SDL_BUTTON_RIGHT == ev.button.button) {
       int px = ev.button.x;
       int py = ev.button.y;
-      printf("SDL_BUTTON_RIGHT x, y %d %d  \n", px, py);
+      // printf("SDL_BUTTON_RIGHT x, y %d %d  \n", px, py);
 
       remote_action.type = ControlType::mouse;
       remote_action.m.flag = MouseFlag::right_down;
@@ -142,7 +142,7 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
     if (SDL_BUTTON_LEFT == ev.button.button) {
       int px = ev.button.x;
       int py = ev.button.y;
-      printf("SDL_MOUSEBUTTONUP x, y %d %d  \n", px, py);
+      // printf("SDL_MOUSEBUTTONUP x, y %d %d  \n", px, py);
 
       remote_action.type = ControlType::mouse;
       remote_action.m.flag = MouseFlag::left_up;
@@ -155,7 +155,7 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
     } else if (SDL_BUTTON_RIGHT == ev.button.button) {
       int px = ev.button.x;
       int py = ev.button.y;
-      printf("SDL_MOUSEBUTTONUP x, y %d %d  \n", px, py);
+      // printf("SDL_MOUSEBUTTONUP x, y %d %d  \n", px, py);
 
       remote_action.type = ControlType::mouse;
       remote_action.m.flag = MouseFlag::right_up;
@@ -169,7 +169,7 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
     int px = ev.motion.x;
     int py = ev.motion.y;
 
-    printf("SDL_MOUSEMOTION x, y %d %d  \n", px, py);
+    // printf("SDL_MOUSEMOTION x, y %d %d  \n", px, py);
 
     remote_action.type = ControlType::mouse;
     remote_action.m.flag = MouseFlag::move;
@@ -213,9 +213,9 @@ void ReceiveDataBuffer(const char *data, size_t size, const char *user_id,
   RemoteAction remote_action;
   memcpy(&remote_action, data, sizeof(remote_action));
 
-  std::cout << "remote_action: " << remote_action.type << " "
-            << remote_action.m.flag << " " << remote_action.m.x << " "
-            << remote_action.m.y << std::endl;
+  // std::cout << "remote_action: " << remote_action.type << " "
+  //           << remote_action.m.flag << " " << remote_action.m.x << " "
+  //           << remote_action.m.y << std::endl;
 #ifdef _WIN32
   INPUT ip;
 
@@ -238,15 +238,15 @@ void ReceiveDataBuffer(const char *data, size_t size, const char *user_id,
     ip.mi.time = 0;
 
     // Set cursor pos
-    // SetCursorPos(ip.mi.dx, ip.mi.dy);
+    SetCursorPos(ip.mi.dx, ip.mi.dy);
     // Send the press
     if (ip.mi.dwFlags != MOUSEEVENTF_MOVE) {
-      // SendInput(1, &ip, sizeof(INPUT));
+      SendInput(1, &ip, sizeof(INPUT));
     }
 
-    std::cout << "Receive data from [" << user << "], " << ip.type << " "
-              << ip.mi.dwFlags << " " << ip.mi.dx << " " << ip.mi.dy
-              << std::endl;
+    // std::cout << "Receive data from [" << user << "], " << ip.type << " "
+    //           << ip.mi.dwFlags << " " << ip.mi.dx << " " << ip.mi.dy
+    //           << std::endl;
   }
 #endif
 }
@@ -538,11 +538,13 @@ int main() {
           static bool connect_button_pressed = false;
           static const char *connect_label = "Connect";
           {
-            static char buf[20] = "";
+            static char remote_id[20] = "";
+            strcpy(remote_id, GetMac(mac_addr).c_str());
             ImGui::Text("REMOTE ID:");
             ImGui::SameLine();
             ImGui::SetNextItemWidth(110);
-            ImGui::InputTextWithHint("id_buf", "000002", buf, IM_ARRAYSIZE(buf),
+            ImGui::InputTextWithHint("id_buf", "000002", remote_id,
+                                     IM_ARRAYSIZE(remote_id),
                                      ImGuiInputTextFlags_AllowTabInput);
 
             ImGui::Spacing();
@@ -559,7 +561,7 @@ int main() {
             if (ImGui::Button(connect_label)) {
               if (strcmp(connect_label, "Connect") == 0 && !joined) {
                 std::string user_id = "C-" + std::string(GetMac(mac_addr));
-                JoinConnection(peer_client, buf);
+                JoinConnection(peer_client, remote_id);
                 joined = true;
               } else if (strcmp(connect_label, "Disconnect") == 0 && joined) {
                 LeaveConnection(peer_client);
