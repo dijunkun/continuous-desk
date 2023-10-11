@@ -548,7 +548,9 @@ int main() {
           static const char *connect_label = "Connect";
           {
             static char remote_id[20] = "";
-            strcpy(remote_id, GetMac(mac_addr).c_str());
+            if (strcmp(remote_id, "") == 0) {
+              strcpy(remote_id, GetMac(mac_addr).c_str());
+            }
             ImGui::Text("REMOTE ID:");
             ImGui::SameLine();
             ImGui::SetNextItemWidth(110);
