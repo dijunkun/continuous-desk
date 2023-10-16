@@ -53,7 +53,7 @@ target("screen_capture")
 target("remote_desk")
     set_kind("binary")
     add_deps("projectx", "screen_capture")
-    add_packages("log", "imgui", "sdl2")
+    add_packages("log", "imgui", "sdl2", "ffmpeg")
     add_files("remote_desk_gui/*.cpp")
     add_includedirs("../../src/interface")
     if is_os("windows") then
