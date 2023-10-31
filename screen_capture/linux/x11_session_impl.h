@@ -28,7 +28,6 @@ class X11SessionImpl : public X11Session {
   void OnFrame();
   void OnClosed();
 
-  int Initialize();
   void CleanUp();
 
   // void message_func();

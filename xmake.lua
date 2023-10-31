@@ -38,7 +38,7 @@ target("log")
 
 target("screen_capture")
     set_kind("static")
-    add_packages("log")
+    add_packages("log", "ffmpeg")
     if is_os("windows") then
         add_files("screen_capture/windows/*.cpp")
         add_includedirs("screen_capture/windows", {public = true})
@@ -63,4 +63,9 @@ target("remote_desk")
         add_links("SDL2")
     elseif is_os("linux") then
         add_links("SDL2")
+        -- add_ldflags("-lsndio", "-lasound", "-lxcb", "-lX11", "-lXext", "-lXv", 
+        -- "-lxcb-shape", "-lxcb-xfixes", "-lxcb-shm", "-lavfilter", "-ldl", 
+        -- "-lavdevice", "-lavformat", "-lavcodec", "-lswscale", "-lswresample", 
+        -- "-lavutil", {force = true})
+        -- -- add_ldflags("-lasound", "-lX11", "-lXext", "-lxcb", "-lsndio", "-lpostproc", "-ldl", {force = true})
     end

@@ -26,6 +26,9 @@
 #include <thread>
 
 extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavdevice/avdevice.h>
+#include <libavfilter/avfilter.h>
 #include <libavformat/avformat.h>
 #include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
@@ -35,7 +38,11 @@ extern "C" {
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_sdlrenderer2.h"
 #include "log.h"
+#ifdef _WIN32
 #include "screen_capture_wgc.h"
+#elif __linux__
+#include "screen_capture_x11.h"
+#endif
 #include "x.h"
 
 #define NV12_BUFFER_SIZE 1280 * 720 * 3 / 2
@@ -74,10 +81,14 @@ bool received_frame = false;
 static bool connect_button_pressed = false;
 static const char *connect_label = "Connect";
 
+#ifdef _WIN32
 ScreenCaptureWgc *screen_capture = nullptr;
+#elif __linux__
+ScreenCaptureX11 *screen_capture = nullptr;
+#endif
 
-char *nv12_buffer_ = nullptr;
-std::chrono::steady_clock::time_point last_frame_time_;
+char *nv12_buffer = nullptr;
+std::chrono::_V2::system_clock::time_point last_frame_time_;
 
 typedef enum { mouse = 0, keyboard } ControlType;
 typedef enum { move = 0, left_down, left_up, right_down, right_up } MouseFlag;
@@ -527,7 +538,7 @@ int main() {
             if (strcmp(online_label, "Online") == 0) {
               CreateConnection(peer_server, mac_addr, server_password);
 
-              nv12_buffer_ = new char[NV12_BUFFER_SIZE];
+              nv12_buffer = new char[NV12_BUFFER_SIZE];
 #ifdef _WIN32
               screen_capture = new ScreenCaptureWgc();
 
@@ -549,9 +560,38 @@ int main() {
 
                     if (tc >= 0) {
                       BGRAToNV12FFmpeg(data, width, height,
-                                       (unsigned char *)nv12_buffer_);
+                                       (unsigned char *)nv12_buffer);
                       SendData(peer_server, DATA_TYPE::VIDEO,
-                               (const char *)nv12_buffer_, NV12_BUFFER_SIZE);
+                               (const char *)nv12_buffer, NV12_BUFFER_SIZE);
+                      // std::cout << "Send" << std::endl;
+                      last_frame_time_ = now_time;
+                    }
+                  });
+
+              screen_capture->Start();
+
+#elif __linux__
+              screen_capture = new ScreenCaptureX11();
+
+              RECORD_DESKTOP_RECT rect;
+              rect.left = 0;
+              rect.top = 0;
+              rect.right = 0;
+              rect.bottom = 0;
+
+              last_frame_time_ = std::chrono::high_resolution_clock::now();
+              screen_capture->Init(
+                  rect, 60,
+                  [](unsigned char *data, int size, int width,
+                     int height) -> void {
+                    auto now_time = std::chrono::high_resolution_clock::now();
+                    std::chrono::duration<double> duration =
+                        now_time - last_frame_time_;
+                    auto tc = duration.count() * 1000;
+
+                    if (tc >= 0) {
+                      SendData(peer_server, DATA_TYPE::VIDEO,
+                               (const char *)nv12_buffer, NV12_BUFFER_SIZE);
                       // std::cout << "Send" << std::endl;
                       last_frame_time_ = now_time;
                     }

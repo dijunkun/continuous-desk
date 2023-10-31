@@ -38,14 +38,12 @@ int X11SessionImpl::Start() {
 
 int X11SessionImpl::Stop() { return 0; }
 
-int X11SessionImpl::Pause() {}
+int X11SessionImpl::Pause() { return 0; }
 
-int X11SessionImpl::Resume() {}
+int X11SessionImpl::Resume() { return 0; }
 
 void X11SessionImpl::OnFrame() {}
 
 void X11SessionImpl::OnClosed() {}
-
-int X11SessionImpl::Initialize() { return 0; }
 
 void X11SessionImpl::CleanUp() {}

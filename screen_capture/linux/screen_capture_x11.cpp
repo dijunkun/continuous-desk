@@ -11,16 +11,20 @@ ScreenCaptureX11::~ScreenCaptureX11() {}
 
 int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
                            cb_desktop_data cb) {
+  if (cb) {
+    _on_data = cb;
+  }
+
   pFormatCtx_ = avformat_alloc_context();
 
   avdevice_register_all();
 
   // grabbing frame rate
-  av_dict_set(&options_, "framerate", "5", 0);
+  av_dict_set(&options_, "framerate", "30", 0);
   // Make the grabbed area follow the mouse
   av_dict_set(&options_, "follow_mouse", "centered", 0);
   // Video frame size. The default is to capture the full screen
-  av_dict_set(&options_, "video_size", "1280x720", 0);
+  // av_dict_set(&options_, "video_size", "1280x720", 0);
   ifmt_ = (AVInputFormat *)av_find_input_format("x11grab");
   if (!ifmt_) {
     printf("Couldn't find_input_format\n");
@@ -103,6 +107,10 @@ int ScreenCaptureX11::Start() {
             sws_scale(img_convert_ctx_, pFrame_->data, pFrame_->linesize, 0,
                       pFrame_->height, pFrameNV12_->data,
                       pFrameNV12_->linesize);
+
+            _on_data((unsigned char *)nv12_buffer_,
+                     pFrame_->width * pFrame_->height * 3 / 2, pFrame_->width,
+                     pFrame_->height);
           }
         }
       }
