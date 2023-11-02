@@ -16,7 +16,6 @@ if is_os("windows") then
     add_requires("vcpkg::ffmpeg 5.1.2", {configs = {shared = false}})
 elseif is_os("linux") then
     add_requires("ffmpeg 5.1.2", {system = false})
-    set_config("cxxflags", "-fPIC")
     add_syslinks("pthread", "dl")
 elseif is_os("macosx") then
     add_requires("ffmpeg 5.1.2", {system = false})
@@ -63,9 +62,8 @@ target("remote_desk")
         add_links("SDL2")
     elseif is_os("linux") then
         add_links("SDL2")
-        -- add_ldflags("-lsndio", "-lasound", "-lxcb", "-lX11", "-lXext", "-lXv", 
-        -- "-lxcb-shape", "-lxcb-xfixes", "-lxcb-shm", "-lavfilter", "-ldl", 
-        -- "-lavdevice", "-lavformat", "-lavcodec", "-lswscale", "-lswresample", 
-        -- "-lavutil", {force = true})
-        -- -- add_ldflags("-lasound", "-lX11", "-lXext", "-lxcb", "-lsndio", "-lpostproc", "-ldl", {force = true})
+        add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
+        "-lswscale", "-lavutil", "-lswresample", "-lpostproc",
+        "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
+        "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-ldl", "-lpthread", {force = true})
     end
