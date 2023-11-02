@@ -592,11 +592,10 @@ int main() {
                     if (tc >= 0) {
                       SendData(peer_server, DATA_TYPE::VIDEO,
                                (const char *)nv12_buffer, NV12_BUFFER_SIZE);
-                      // std::cout << "Send" << std::endl;
+                      std::cout << "Send" << std::endl;
                       last_frame_time_ = now_time;
                     }
                   });
-
               screen_capture->Start();
 #endif
             } else {

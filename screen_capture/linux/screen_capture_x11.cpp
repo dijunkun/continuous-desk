@@ -5,9 +5,20 @@
 #define NV12_BUFFER_SIZE 1280 * 720 * 3 / 2
 unsigned char nv12_buffer_[NV12_BUFFER_SIZE];
 
-ScreenCaptureX11::ScreenCaptureX11() {}
+FILE *file = nullptr;
 
-ScreenCaptureX11::~ScreenCaptureX11() {}
+ScreenCaptureX11::ScreenCaptureX11() {
+  file = fopen("nv12.yuv", "w+b");
+  if (!file) {
+    printf("Fail to open nv12.yuv\n");
+  }
+}
+
+ScreenCaptureX11::~ScreenCaptureX11() {
+  if (capture_thread_->joinable()) {
+    capture_thread_->join();
+  }
+}
 
 int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
                            cb_desktop_data cb) {
@@ -22,9 +33,9 @@ int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
   // grabbing frame rate
   av_dict_set(&options_, "framerate", "30", 0);
   // Make the grabbed area follow the mouse
-  av_dict_set(&options_, "follow_mouse", "centered", 0);
+  // av_dict_set(&options_, "follow_mouse", "centered", 0);
   // Video frame size. The default is to capture the full screen
-  // av_dict_set(&options_, "video_size", "1280x720", 0);
+  av_dict_set(&options_, "video_size", "1280x720", 0);
   ifmt_ = (AVInputFormat *)av_find_input_format("x11grab");
   if (!ifmt_) {
     printf("Couldn't find_input_format\n");
@@ -57,7 +68,6 @@ int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
   pCodecCtx_ = avcodec_alloc_context3(NULL);
   avcodec_parameters_to_context(pCodecCtx_, pCodecParam_);
 
-  // pCodec_ = const_cast<AVCodec *>(avcodec_find_decoder(AV_CODEC_ID_H264));
   pCodec_ = const_cast<AVCodec *>(avcodec_find_decoder(pCodecCtx_->codec_id));
   if (pCodec_ == NULL) {
     printf("Codec not found.\n");
@@ -90,6 +100,7 @@ int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
 int ScreenCaptureX11::Start() {
   capture_thread_.reset(new std::thread([this]() {
     while (1) {
+      printf("00000\n");
       if (av_read_frame(pFormatCtx_, packet_) >= 0) {
         printf("111111444444\n");
         if (packet_->stream_index == videoindex_) {
@@ -107,6 +118,9 @@ int ScreenCaptureX11::Start() {
             sws_scale(img_convert_ctx_, pFrame_->data, pFrame_->linesize, 0,
                       pFrame_->height, pFrameNV12_->data,
                       pFrameNV12_->linesize);
+
+            fwrite(nv12_buffer_, 1, pFrame_->width * pFrame_->height * 3 / 2,
+                   file);
 
             _on_data((unsigned char *)nv12_buffer_,
                      pFrame_->width * pFrame_->height * 3 / 2, pFrame_->width,
