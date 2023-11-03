@@ -1,6 +1,6 @@
 set_project("remote_desk")
 set_version("0.0.1")
-set_license("GPL-3.0")
+set_license("LGPL-3.0")
 
 add_rules("mode.release", "mode.debug")
 set_languages("c++17")
@@ -15,6 +15,7 @@ if is_os("windows") then
     add_links("Shell32", "windowsapp", "dwmapi", "User32", "kernel32")
     add_requires("vcpkg::ffmpeg 5.1.2", {configs = {shared = false}})
 elseif is_os("linux") then
+    add_requireconfs("ffmpeg.x264", {configs = {pic = true}})
     add_requires("ffmpeg 5.1.2", {system = false})
     add_syslinks("pthread", "dl")
 elseif is_os("macosx") then
@@ -63,7 +64,7 @@ target("remote_desk")
     elseif is_os("linux") then
         add_links("SDL2")
         add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
-        "-lswscale", "-lavutil", "-lswresample", "-lpostproc",
+        "-lswscale", "-lavutil", "-lswresample",
         "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
         "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-ldl", "-lpthread", {force = true})
     end
@@ -74,6 +75,6 @@ target("linux_capture")
     add_files("remote_desk_gui/linux_capture.cpp")
     add_links("SDL2")
     add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
-    "-lswscale", "-lavutil", "-lswresample", "-lpostproc",
+    "-lswscale", "-lavutil", "-lswresample",
     "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
     "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-lpthread", "-lx264", "-ldl", "-lSDL2" ,{force = true})

@@ -5,14 +5,7 @@
 #define NV12_BUFFER_SIZE 1280 * 720 * 3 / 2
 unsigned char nv12_buffer_[NV12_BUFFER_SIZE];
 
-FILE *file = nullptr;
-
-ScreenCaptureX11::ScreenCaptureX11() {
-  file = fopen("nv12.yuv", "w+b");
-  if (!file) {
-    printf("Fail to open nv12.yuv\n");
-  }
-}
+ScreenCaptureX11::ScreenCaptureX11() {}
 
 ScreenCaptureX11::~ScreenCaptureX11() {
   if (capture_thread_->joinable()) {
@@ -79,7 +72,7 @@ int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
   }
 
   pFrame_ = av_frame_alloc();
-  pFrameNV12_ = av_frame_alloc();
+  pFrameNv12_ = av_frame_alloc();
 
   const int pixel_w = 1280, pixel_h = 720;
   int screen_w = 1280, screen_h = 720;
@@ -100,31 +93,24 @@ int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
 int ScreenCaptureX11::Start() {
   capture_thread_.reset(new std::thread([this]() {
     while (1) {
-      printf("00000\n");
       if (av_read_frame(pFormatCtx_, packet_) >= 0) {
-        printf("111111444444\n");
         if (packet_->stream_index == videoindex_) {
-          printf("11111155555\n");
           avcodec_send_packet(pCodecCtx_, packet_);
           got_picture_ = avcodec_receive_frame(pCodecCtx_, pFrame_);
-          printf("33333333\n");
-          if (!got_picture_) {
-            printf("44444444444\n");
 
-            av_image_fill_arrays(pFrameNV12_->data, pFrameNV12_->linesize,
+          if (!got_picture_) {
+            av_image_fill_arrays(pFrameNv12_->data, pFrameNv12_->linesize,
                                  nv12_buffer_, AV_PIX_FMT_NV12, pFrame_->width,
                                  pFrame_->height, 1);
 
             sws_scale(img_convert_ctx_, pFrame_->data, pFrame_->linesize, 0,
-                      pFrame_->height, pFrameNV12_->data,
-                      pFrameNV12_->linesize);
-
-            fwrite(nv12_buffer_, 1, pFrame_->width * pFrame_->height * 3 / 2,
-                   file);
+                      pFrame_->height, pFrameNv12_->data,
+                      pFrameNv12_->linesize);
 
             _on_data((unsigned char *)nv12_buffer_,
                      pFrame_->width * pFrame_->height * 3 / 2, pFrame_->width,
                      pFrame_->height);
+            // av_packet_unref(packet_);
           }
         }
       }

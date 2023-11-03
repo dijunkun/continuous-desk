@@ -74,7 +74,7 @@ class ScreenCaptureX11 {
   AVDictionary *options_ = nullptr;
   AVInputFormat *ifmt_ = nullptr;
   AVFrame *pFrame_ = nullptr;
-  AVFrame *pFrameNV12_ = nullptr;
+  AVFrame *pFrameNv12_ = nullptr;
   AVPacket *packet_ = nullptr;
   struct SwsContext *img_convert_ctx_ = nullptr;
 
