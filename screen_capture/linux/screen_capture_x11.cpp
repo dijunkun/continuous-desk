@@ -26,7 +26,7 @@ int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
   // grabbing frame rate
   av_dict_set(&options_, "framerate", "30", 0);
   // Make the grabbed area follow the mouse
-  // av_dict_set(&options_, "follow_mouse", "centered", 0);
+  av_dict_set(&options_, "follow_mouse", "centered", 0);
   // Video frame size. The default is to capture the full screen
   av_dict_set(&options_, "video_size", "1280x720", 0);
   ifmt_ = (AVInputFormat *)av_find_input_format("x11grab");

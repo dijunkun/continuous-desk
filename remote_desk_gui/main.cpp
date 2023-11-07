@@ -702,7 +702,7 @@ int main() {
         SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, &sdlRect);
       } else {
         if (joined) {
-          ProcessMouseKeyEven(event);
+          // ProcessMouseKeyEven(event);
         }
       }
     }
