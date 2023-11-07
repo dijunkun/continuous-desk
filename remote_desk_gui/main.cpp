@@ -88,7 +88,12 @@ ScreenCaptureX11 *screen_capture = nullptr;
 #endif
 
 char *nv12_buffer = nullptr;
+
+#ifdef __linux__
 std::chrono::_V2::system_clock::time_point last_frame_time_;
+#else
+std::chrono::steady_clock::time_point last_frame_time_;
+#endif
 
 typedef enum { mouse = 0, keyboard } ControlType;
 typedef enum { move = 0, left_down, left_up, right_down, right_up } MouseFlag;
