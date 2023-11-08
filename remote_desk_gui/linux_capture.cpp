@@ -239,6 +239,7 @@ int main(int argc, char *argv[]) {
       if (av_read_frame(pFormatCtx, packet) >= 0) {
         if (packet->stream_index == videoindex) {
           avcodec_send_packet(pCodecCtx, packet);
+          av_packet_unref(packet);
           got_picture = avcodec_receive_frame(pCodecCtx, pFrame);
           // ret = avcodec_decode_video2(pCodecCtx, pFrame, &got_picture,
           // packet);

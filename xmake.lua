@@ -6,7 +6,7 @@ add_rules("mode.release", "mode.debug")
 set_languages("c++17")
 
 add_requires("spdlog 1.11.0", {system = false})
-add_requires("imgui 1.89.9", {configs = {sdl2 = true, sdl2_renderer = true, glfw = true}})
+add_requires("imgui 1.89.9", {configs = {sdl2 = true, sdl2_renderer = true}})
 add_defines("UNICODE")
 
 add_requires("sdl2", {system = false})
@@ -66,15 +66,16 @@ target("remote_desk")
         add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
         "-lswscale", "-lavutil", "-lswresample",
         "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
-        "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-ldl", "-lpthread", {force = true})
+        "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-ldl", "-lpthread", 
+        {force = true})
     end
 
 target("linux_capture")
     set_kind("binary")
-    add_packages("sdl2", "imgui",  "ffmpeg", "glfw", "glad")
+    add_packages("sdl2", "imgui",  "ffmpeg", "openh264")
     add_files("remote_desk_gui/linux_capture.cpp")
-    add_links("SDL2")
     add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
     "-lswscale", "-lavutil", "-lswresample",
     "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
-    "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-lpthread", "-lx264", "-ldl", "-lSDL2" ,{force = true})
+    "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-lpthread", "-lSDL2", "-lopenh264",
+    "-ldl" ,{force = true})

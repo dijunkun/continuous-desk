@@ -96,6 +96,7 @@ int ScreenCaptureX11::Start() {
       if (av_read_frame(pFormatCtx_, packet_) >= 0) {
         if (packet_->stream_index == videoindex_) {
           avcodec_send_packet(pCodecCtx_, packet_);
+          av_packet_unref(packet_);
           got_picture_ = avcodec_receive_frame(pCodecCtx_, pFrame_);
 
           if (!got_picture_) {
@@ -110,7 +111,6 @@ int ScreenCaptureX11::Start() {
             _on_data((unsigned char *)nv12_buffer_,
                      pFrame_->width * pFrame_->height * 3 / 2, pFrame_->width,
                      pFrame_->height);
-            // av_packet_unref(packet_);
           }
         }
       }
