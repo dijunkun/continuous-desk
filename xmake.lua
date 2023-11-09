@@ -15,7 +15,6 @@ if is_os("windows") then
     add_links("Shell32", "windowsapp", "dwmapi", "User32", "kernel32")
     add_requires("vcpkg::ffmpeg 5.1.2", {configs = {shared = false}})
 elseif is_os("linux") then
-    add_requireconfs("ffmpeg.x264", {configs = {pic = true}})
     add_requires("ffmpeg 5.1.2", {system = false})
     add_syslinks("pthread", "dl")
 elseif is_os("macosx") then
