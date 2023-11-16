@@ -647,6 +647,7 @@ int main() {
               } else if (strcmp(connect_label, "Disconnect") == 0 && joined) {
                 LeaveConnection(peer_client);
                 joined = false;
+                received_frame = false;
               }
 
               connect_button_pressed = !connect_button_pressed;
