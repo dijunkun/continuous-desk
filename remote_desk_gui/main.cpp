@@ -703,14 +703,15 @@ int main() {
         sdlRect.h = screen_h;
 
         SDL_UpdateTexture(sdlTexture, NULL, dst_buffer, pixel_w);
-        SDL_RenderClear(sdlRenderer);
-        SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, &sdlRect);
       } else {
         if (joined) {
           // ProcessMouseKeyEven(event);
         }
       }
     }
+
+    SDL_RenderClear(sdlRenderer);
+    SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, &sdlRect);
 
     if (!joined || !received_frame) {
       SDL_RenderClear(sdlRenderer);
