@@ -68,13 +68,20 @@ target("remote_desk")
         "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-ldl", "-lpthread", 
         {force = true})
     end
+    after_install(function (target)
+        os.cp("$(projectdir)/thirdparty/nvcodec/Lib/x64/*.so", "$(projectdir)/out/bin")
+        os.cp("$(projectdir)/thirdparty/nvcodec/Lib/x64/*.so.1", "$(projectdir)/out/bin")
+        os.cp("$(projectdir)/out/lib/*.so", "$(projectdir)/out/bin")
+        os.rm("$(projectdir)/out/include")
+        os.rm("$(projectdir)/out/lib")
+    end)
 
-target("linux_capture")
-    set_kind("binary")
-    add_packages("sdl2", "imgui",  "ffmpeg", "openh264")
-    add_files("remote_desk_gui/linux_capture.cpp")
-    add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
-    "-lswscale", "-lavutil", "-lswresample",
-    "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
-    "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-lpthread", "-lSDL2", "-lopenh264",
-    "-ldl" ,{force = true})
+-- target("linux_capture")
+--     set_kind("binary")
+--     add_packages("sdl2", "imgui",  "ffmpeg", "openh264")
+--     add_files("remote_desk_gui/linux_capture.cpp")
+--     add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
+--     "-lswscale", "-lavutil", "-lswresample",
+--     "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
+--     "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-lpthread", "-lSDL2", "-lopenh264",
+--     "-ldl" ,{force = true})

@@ -28,7 +28,7 @@ package("ffmpeg")
         add_versions("git:5.0.1", "n5.0.1")
         add_versions("git:4.0.2", "n4.0.2")
 
-        add_configs("gpl",              {description = "Enable GPL code", default = true, type = "boolean"})
+        add_configs("gpl",              {description = "Enable GPL code", default = false, type = "boolean"})
         add_configs("ffprobe",          {description = "Enable ffprobe program.", default = false, type = "boolean"})
         add_configs("ffmpeg",           {description = "Enable ffmpeg program.", default = true, type = "boolean"})
         add_configs("ffplay",           {description = "Enable ffplay program.", default = false, type = "boolean"})
@@ -42,14 +42,14 @@ package("ffmpeg")
         add_configs("vdpau",            {description = "Enable vdpau library.", default = false, type = "boolean"})
         add_configs("hardcoded-tables", {description = "Enable hardcoded tables.", default = true, type = "boolean"})
         add_configs("asm",              {description = "Enable asm", default = false, type = "boolean"})
-        add_configs("libx264",          {description = "Enable libx264", default = true, type = "boolean"})
+        add_configs("libopenh264",      {description = "Enable libopenh264", default = true, type = "boolean"})
     end
 
     add_links("avfilter", "avdevice", "avformat", "avcodec", "swscale", "swresample", "avutil")
     if is_plat("macosx") then
         add_frameworks("CoreFoundation", "Foundation", "CoreVideo", "CoreMedia", "AudioToolbox", "VideoToolbox", "Security")
     elseif is_plat("linux") then
-        add_syslinks("pthread")
+        add_syslinks("pthread", "openh264")
     end
 
     if is_plat("linux", "macosx") then

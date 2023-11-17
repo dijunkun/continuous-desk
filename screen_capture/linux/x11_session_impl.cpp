@@ -20,7 +20,7 @@ X11SessionImpl::~X11SessionImpl() {
 
 void X11SessionImpl::Release() { delete this; }
 
-int X11SessionImpl::Initialize() {}
+int X11SessionImpl::Initialize() { return 0; }
 
 void X11SessionImpl::RegisterObserver(x11_session_observer *observer) {
   observer_ = observer;
