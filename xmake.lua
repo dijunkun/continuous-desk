@@ -54,7 +54,7 @@ target("remote_desk")
     set_kind("binary")
     add_deps("log", "screen_capture")
     add_packages("sdl2", "imgui", "ffmpeg", "projectx")
-    add_files("src/remote_desk_gui/main.cpp")
+    add_files("src/gui/main.cpp")
     if is_os("windows") then
         add_links("SDL2-static", "SDL2main", "gdi32", "winmm", 
         "setupapi", "version", "Imm32", "iphlpapi")
@@ -79,7 +79,7 @@ target("remote_desk")
 -- target("linux_capture")
 --     set_kind("binary")
 --     add_packages("sdl2", "imgui",  "ffmpeg", "openh264")
---     add_files("remote_desk_gui/linux_capture.cpp")
+--     add_files("test/linux_capture.cpp")
 --     add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
 --     "-lswscale", "-lavutil", "-lswresample",
 --     "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
