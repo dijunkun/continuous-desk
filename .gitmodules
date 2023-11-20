@@ -1,0 +1,3 @@
+[submodule "thirdparty/projectx"]
+	path = thirdparty/projectx
+	url = git@github.com:dijunkun/projectx.git

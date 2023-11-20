@@ -10,6 +10,7 @@ add_requires("imgui 1.89.9", {configs = {sdl2 = true, sdl2_renderer = true}})
 add_defines("UNICODE")
 
 add_requires("sdl2", {system = false})
+add_requires("projectx")
 
 if is_os("windows") then
     add_links("Shell32", "windowsapp", "dwmapi", "User32", "kernel32")
@@ -32,29 +33,28 @@ includes("thirdparty")
 target("log")
     set_kind("headeronly")
     add_packages("spdlog")
-    add_headerfiles("../utils/log/log.h")
-    add_includedirs("../utils/log", {public = true})
+    add_headerfiles("src/log/log.h")
+    add_includedirs("src/log", {public = true})
 
 target("screen_capture")
     set_kind("static")
     add_packages("log", "ffmpeg")
     if is_os("windows") then
-        add_files("screen_capture/windows/*.cpp")
-        add_includedirs("screen_capture/windows", {public = true})
+        add_files("src/screen_capture/windows/*.cpp")
+        add_includedirs("src/screen_capture/windows", {public = true})
     elseif is_os("macosx") then
-         add_files("screen_capture/macosx/*.cpp")
-         add_includedirs("screen_capture/macosx", {public = true})
+         add_files("src/screen_capture/macosx/*.cpp")
+         add_includedirs("ssrc/creen_capture/macosx", {public = true})
     elseif is_os("linux") then
-         add_files("screen_capture/linux/*.cpp")
-         add_includedirs("screen_capture/linux", {public = true})
+         add_files("src/screen_capture/linux/*.cpp")
+         add_includedirs("src/screen_capture/linux", {public = true})
     end
 
 target("remote_desk")
     set_kind("binary")
-    add_deps("projectx", "screen_capture")
-    add_packages("log", "sdl2", "imgui", "ffmpeg")
-    add_files("remote_desk_gui/main.cpp")
-    add_includedirs("../../src/interface")
+    add_deps("log", "screen_capture")
+    add_packages("sdl2", "imgui", "ffmpeg", "projectx")
+    add_files("src/remote_desk_gui/main.cpp")
     if is_os("windows") then
         add_links("SDL2-static", "SDL2main", "gdi32", "winmm", 
         "setupapi", "version", "Imm32", "iphlpapi")

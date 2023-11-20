@@ -43,7 +43,7 @@ extern "C" {
 #elif __linux__
 #include "screen_capture_x11.h"
 #endif
-#include "x.h"
+#include "../../thirdparty/projectx/src/interface/x.h"
 
 #define NV12_BUFFER_SIZE 1280 * 720 * 3 / 2
 
@@ -54,6 +54,7 @@ extern "C" {
 #endif
 
 int screen_w = 1280, screen_h = 720;
+int window_w = 1280, window_h = 720;
 const int pixel_w = 1280, pixel_h = 720;
 
 unsigned char dst_buffer[pixel_w * pixel_h * 3 / 2];
@@ -118,7 +119,7 @@ typedef struct {
 } RemoteAction;
 
 inline int ProcessMouseKeyEven(SDL_Event &ev) {
-  float ratio = 1280.0 / screen_w;
+  float ratio = 1280.0 / window_w;
 
   RemoteAction remote_action;
 
@@ -427,6 +428,67 @@ int main() {
   std::string client_user_id = "C-" + std::string(GetMac(mac_addr));
   Init(peer_client, client_user_id.c_str());
 
+  {
+    static char server_password[20] = "";
+    std::string user_id = "S-" + std::string(GetMac(mac_addr));
+    CreateConnection(peer_server, mac_addr, server_password);
+
+    nv12_buffer = new char[NV12_BUFFER_SIZE];
+#ifdef _WIN32
+    screen_capture = new ScreenCaptureWgc();
+
+    RECORD_DESKTOP_RECT rect;
+    rect.left = 0;
+    rect.top = 0;
+    rect.right = GetSystemMetrics(SM_CXSCREEN);
+    rect.bottom = GetSystemMetrics(SM_CYSCREEN);
+
+    last_frame_time_ = std::chrono::high_resolution_clock::now();
+    screen_capture->Init(
+        rect, 60,
+        [](unsigned char *data, int size, int width, int height) -> void {
+          auto now_time = std::chrono::high_resolution_clock::now();
+          std::chrono::duration<double> duration = now_time - last_frame_time_;
+          auto tc = duration.count() * 1000;
+
+          if (tc >= 0) {
+            BGRAToNV12FFmpeg(data, width, height, (unsigned char *)nv12_buffer);
+            SendData(peer_server, DATA_TYPE::VIDEO, (const char *)nv12_buffer,
+                     NV12_BUFFER_SIZE);
+            // std::cout << "Send" << std::endl;
+            last_frame_time_ = now_time;
+          }
+        });
+
+    screen_capture->Start();
+
+#elif __linux__
+    screen_capture = new ScreenCaptureX11();
+
+    RECORD_DESKTOP_RECT rect;
+    rect.left = 0;
+    rect.top = 0;
+    rect.right = 0;
+    rect.bottom = 0;
+
+    last_frame_time_ = std::chrono::high_resolution_clock::now();
+    screen_capture->Init(
+        rect, 60,
+        [](unsigned char *data, int size, int width, int height) -> void {
+          auto now_time = std::chrono::high_resolution_clock::now();
+          std::chrono::duration<double> duration = now_time - last_frame_time_;
+          auto tc = duration.count() * 1000;
+
+          if (tc >= 0) {
+            SendData(peer_server, DATA_TYPE::VIDEO, (const char *)data,
+                     NV12_BUFFER_SIZE);
+            last_frame_time_ = now_time;
+          }
+        });
+    screen_capture->Start();
+#endif
+  }
+
   // Setup SDL
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) !=
       0) {
@@ -443,21 +505,13 @@ int main() {
   SDL_WindowFlags window_flags =
       (SDL_WindowFlags)(SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
   window = SDL_CreateWindow("Remote Desk", SDL_WINDOWPOS_CENTERED,
-                            SDL_WINDOWPOS_CENTERED, screen_w, screen_h,
+                            SDL_WINDOWPOS_CENTERED, window_w, window_h,
                             window_flags);
 
-  // int new_screen_w = 0;
-  // int new_screen_h = 0;
-  // SDL_GetWindowSize(window, &new_screen_w, &new_screen_h);
-
-  // if (new_screen_w != screen_w) {
-  //   screen_w = new_screen_w;
-  //   screen_h = new_screen_w * 9 / 16;
-  // } else if (new_screen_h != screen_h) {
-  //   screen_w = new_screen_h * 16 / 9;
-  //   screen_h = new_screen_h;
-  // }
-  // SDL_SetWindowSize(window, screen_w, screen_h);
+  SDL_DisplayMode DM;
+  SDL_GetCurrentDisplayMode(0, &DM);
+  screen_w = DM.w;
+  screen_h = DM.h;
 
   sdlRenderer = SDL_CreateRenderer(
       window, -1, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED);
@@ -509,108 +563,117 @@ int main() {
 
       const ImGuiViewport *main_viewport = ImGui::GetMainViewport();
       ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Once);
-      ImGui::SetNextWindowSize(ImVec2(180, 225));
+      ImGui::SetNextWindowSize(ImVec2(180, 130));
 
       ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoResize);
 
       {
-        ImGui::Text("LOCAL ID: ");
-        ImGui::SameLine();
+        // ImGui::Text("LOCAL ID: ");
+        // ImGui::SameLine();
 
-        ImGui::Selectable(mac_addr, false,
-                          ImGuiSelectableFlags_AllowDoubleClick);
+        // ImGui::Selectable(mac_addr, false,
+        //                   ImGuiSelectableFlags_AllowDoubleClick);
 
-        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
-          ImGui::SetClipboardText(mac_addr);
-        }
+        // if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+        //   ImGui::SetClipboardText(mac_addr);
+        // }
 
-        ImGui::Spacing();
+        // ImGui::Spacing();
 
-        ImGui::Text("PASSWORD: ");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(110);
-        static char server_password[20] = "";
-        ImGui::InputTextWithHint("server_password", "000001", server_password,
-                                 IM_ARRAYSIZE(server_password),
-                                 ImGuiInputTextFlags_AllowTabInput);
+        // ImGui::Text("PASSWORD: ");
+        // ImGui::SameLine();
+        // ImGui::SetNextItemWidth(110);
+        // static char server_password[20] = "";
+        // ImGui::InputTextWithHint("server_password", "000001",
+        // server_password,
+        //                          IM_ARRAYSIZE(server_password),
+        //                          ImGuiInputTextFlags_AllowTabInput);
 
-        ImGui::Spacing();
-        {
-          static bool online_button_pressed = false;
-          static const char *online_label = "Online";
+        //         ImGui::Spacing();
+        //         {
+        //           static bool online_button_pressed = false;
+        //           static const char *online_label = "Online";
 
-          if (ImGui::Button(online_label)) {
-            std::string user_id = "S-" + std::string(GetMac(mac_addr));
+        //           if (ImGui::Button(online_label)) {
+        //             std::string user_id = "S-" +
+        //             std::string(GetMac(mac_addr));
 
-            if (strcmp(online_label, "Online") == 0) {
-              CreateConnection(peer_server, mac_addr, server_password);
+        //             if (strcmp(online_label, "Online") == 0) {
+        //               CreateConnection(peer_server, mac_addr,
+        //               server_password);
 
-              nv12_buffer = new char[NV12_BUFFER_SIZE];
-#ifdef _WIN32
-              screen_capture = new ScreenCaptureWgc();
+        //               nv12_buffer = new char[NV12_BUFFER_SIZE];
+        // #ifdef _WIN32
+        //               screen_capture = new ScreenCaptureWgc();
 
-              RECORD_DESKTOP_RECT rect;
-              rect.left = 0;
-              rect.top = 0;
-              rect.right = GetSystemMetrics(SM_CXSCREEN);
-              rect.bottom = GetSystemMetrics(SM_CYSCREEN);
+        //               RECORD_DESKTOP_RECT rect;
+        //               rect.left = 0;
+        //               rect.top = 0;
+        //               rect.right = GetSystemMetrics(SM_CXSCREEN);
+        //               rect.bottom = GetSystemMetrics(SM_CYSCREEN);
 
-              last_frame_time_ = std::chrono::high_resolution_clock::now();
-              screen_capture->Init(
-                  rect, 60,
-                  [](unsigned char *data, int size, int width,
-                     int height) -> void {
-                    auto now_time = std::chrono::high_resolution_clock::now();
-                    std::chrono::duration<double> duration =
-                        now_time - last_frame_time_;
-                    auto tc = duration.count() * 1000;
+        //               last_frame_time_ =
+        //               std::chrono::high_resolution_clock::now();
+        //               screen_capture->Init(
+        //                   rect, 60,
+        //                   [](unsigned char *data, int size, int width,
+        //                      int height) -> void {
+        //                     auto now_time =
+        //                     std::chrono::high_resolution_clock::now();
+        //                     std::chrono::duration<double> duration =
+        //                         now_time - last_frame_time_;
+        //                     auto tc = duration.count() * 1000;
 
-                    if (tc >= 0) {
-                      BGRAToNV12FFmpeg(data, width, height,
-                                       (unsigned char *)nv12_buffer);
-                      SendData(peer_server, DATA_TYPE::VIDEO,
-                               (const char *)nv12_buffer, NV12_BUFFER_SIZE);
-                      // std::cout << "Send" << std::endl;
-                      last_frame_time_ = now_time;
-                    }
-                  });
+        //                     if (tc >= 0) {
+        //                       BGRAToNV12FFmpeg(data, width, height,
+        //                                        (unsigned char *)nv12_buffer);
+        //                       SendData(peer_server, DATA_TYPE::VIDEO,
+        //                                (const char *)nv12_buffer,
+        //                                NV12_BUFFER_SIZE);
+        //                       // std::cout << "Send" << std::endl;
+        //                       last_frame_time_ = now_time;
+        //                     }
+        //                   });
 
-              screen_capture->Start();
+        //               screen_capture->Start();
 
-#elif __linux__
-              screen_capture = new ScreenCaptureX11();
+        // #elif __linux__
+        //               screen_capture = new ScreenCaptureX11();
 
-              RECORD_DESKTOP_RECT rect;
-              rect.left = 0;
-              rect.top = 0;
-              rect.right = 0;
-              rect.bottom = 0;
+        //               RECORD_DESKTOP_RECT rect;
+        //               rect.left = 0;
+        //               rect.top = 0;
+        //               rect.right = 0;
+        //               rect.bottom = 0;
 
-              last_frame_time_ = std::chrono::high_resolution_clock::now();
-              screen_capture->Init(
-                  rect, 60,
-                  [](unsigned char *data, int size, int width,
-                     int height) -> void {
-                    auto now_time = std::chrono::high_resolution_clock::now();
-                    std::chrono::duration<double> duration =
-                        now_time - last_frame_time_;
-                    auto tc = duration.count() * 1000;
+        //               last_frame_time_ =
+        //               std::chrono::high_resolution_clock::now();
+        //               screen_capture->Init(
+        //                   rect, 60,
+        //                   [](unsigned char *data, int size, int width,
+        //                      int height) -> void {
+        //                     auto now_time =
+        //                     std::chrono::high_resolution_clock::now();
+        //                     std::chrono::duration<double> duration =
+        //                         now_time - last_frame_time_;
+        //                     auto tc = duration.count() * 1000;
 
-                    if (tc >= 0) {
-                      SendData(peer_server, DATA_TYPE::VIDEO,
-                               (const char *)data, NV12_BUFFER_SIZE);
-                      last_frame_time_ = now_time;
-                    }
-                  });
-              screen_capture->Start();
-#endif
-            } else {
-              LeaveConnection(peer_server);
-            }
-            online_button_pressed = !online_button_pressed;
-            online_label = online_button_pressed ? "Offline" : "Online";
-          }
-        }
+        //                     if (tc >= 0) {
+        //                       SendData(peer_server, DATA_TYPE::VIDEO,
+        //                                (const char *)data, NV12_BUFFER_SIZE);
+        //                       last_frame_time_ = now_time;
+        //                     }
+        //                   });
+        //               screen_capture->Start();
+        // #endif
+        //             } else {
+        //               LeaveConnection(peer_server);
+        //             }
+        //             online_button_pressed = !online_button_pressed;
+        //             online_label = online_button_pressed ? "Offline" :
+        //             "Online";
+        //           }
+        //         }
 
         ImGui::Spacing();
 
@@ -632,14 +695,14 @@ int main() {
 
             ImGui::Spacing();
 
-            ImGui::Text("PASSWORD: ");
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(110);
+            // ImGui::Text("PASSWORD: ");
+            // ImGui::SameLine();
+            // ImGui::SetNextItemWidth(110);
             static char client_password[20] = "";
-            ImGui::InputTextWithHint("client_password", "000003",
-                                     client_password,
-                                     IM_ARRAYSIZE(client_password),
-                                     ImGuiInputTextFlags_AllowTabInput);
+            // ImGui::InputTextWithHint("client_password", "000003",
+            //                          client_password,
+            //                          IM_ARRAYSIZE(client_password),
+            //                          ImGuiInputTextFlags_AllowTabInput);
 
             if (ImGui::Button(connect_label)) {
               if (strcmp(connect_label, "Connect") == 0 && !joined) {
@@ -667,13 +730,13 @@ int main() {
 
       {
         if (ImGui::Button("Fix ratio")) {
-          SDL_GetWindowSize(window, &screen_w, &screen_h);
+          SDL_GetWindowSize(window, &window_w, &window_h);
 
-          if (screen_h != screen_w * 9 / 16) {
-            screen_w = screen_h * 16 / 9;
+          if (window_h != window_w * 9 / 16) {
+            window_w = window_h * 16 / 9;
           }
 
-          SDL_SetWindowSize(window, screen_w, screen_h);
+          SDL_SetWindowSize(window, window_w, window_h);
         }
       }
 
@@ -692,9 +755,9 @@ int main() {
         done = true;
       } else if (event.type == SDL_WINDOWEVENT &&
                  event.window.event == SDL_WINDOWEVENT_RESIZED) {
-        SDL_GetWindowSize(window, &screen_w, &screen_h);
-        SDL_SetWindowSize(window, screen_w, screen_h);
-        // printf("Resize windows: %dx%d\n", screen_w, screen_h);
+        SDL_GetWindowSize(window, &window_w, &window_h);
+        SDL_SetWindowSize(window, window_w, window_h);
+        // printf("Resize windows: %dx%d\n", window_w, window_h);
       } else if (event.type == SDL_WINDOWEVENT &&
                  event.window.event == SDL_WINDOWEVENT_CLOSE &&
                  event.window.windowID == SDL_GetWindowID(window)) {
@@ -702,13 +765,13 @@ int main() {
       } else if (event.type == REFRESH_EVENT) {
         sdlRect.x = 0;
         sdlRect.y = 0;
-        sdlRect.w = screen_w;
-        sdlRect.h = screen_h;
+        sdlRect.w = window_w;
+        sdlRect.h = window_h;
 
         SDL_UpdateTexture(sdlTexture, NULL, dst_buffer, pixel_w);
       } else {
         if (joined) {
-          // ProcessMouseKeyEven(event);
+          ProcessMouseKeyEven(event);
         }
       }
     }
@@ -741,6 +804,8 @@ int main() {
   }
 
   // Cleanup
+  LeaveConnection(peer_server);
+
   ImGui_ImplSDLRenderer2_Shutdown();
   ImGui_ImplSDL2_Shutdown();
   ImGui::DestroyContext();
