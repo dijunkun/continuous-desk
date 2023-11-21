@@ -34,6 +34,8 @@ extern "C" {
 #include <libswscale/swscale.h>
 };
 
+#include <stdio.h>
+
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_sdlrenderer2.h"
@@ -73,6 +75,10 @@ std::string connection_status = "-";
 #define REFRESH_EVENT (SDL_USEREVENT + 1)
 #define QUIT_EVENT (SDL_USEREVENT + 2)
 
+typedef struct {
+  char password[16];
+} CDCache;
+
 int thread_exit = 0;
 PeerPtr *peer_server = nullptr;
 PeerPtr *peer_client = nullptr;
@@ -81,6 +87,9 @@ bool received_frame = false;
 
 static bool connect_button_pressed = false;
 static const char *connect_label = "Connect";
+static char input_password[7] = "123456";
+static FILE *cd_cache_file = nullptr;
+static CDCache cd_cache;
 
 #ifdef _WIN32
 ScreenCaptureWgc *screen_capture = nullptr;
@@ -406,6 +415,15 @@ int BGRAToNV12FFmpeg(unsigned char *src_buffer, int width, int height,
 
 int main() {
   LOG_INFO("Remote desk");
+
+  cd_cache_file = fopen("cache.cd", "r+");
+  if (cd_cache_file) {
+    fseek(cd_cache_file, 0, SEEK_SET);
+    fread(&cd_cache.password, sizeof(cd_cache.password), 1, cd_cache_file);
+    fclose(cd_cache_file);
+    strncpy(input_password, cd_cache.password, sizeof(cd_cache.password));
+  }
+
   std::string default_cfg_path = "../../../../config/config.ini";
   std::ifstream f(default_cfg_path.c_str());
 
@@ -417,7 +435,7 @@ int main() {
   params.on_connection_status = ConnectionStatus;
 
   std::string transmission_id = "000001";
-  char mac_addr[10];
+  char mac_addr[16];
   GetMac(mac_addr);
 
   peer_server = CreatePeer(&params);
@@ -563,19 +581,47 @@ int main() {
 
       const ImGuiViewport *main_viewport = ImGui::GetMainViewport();
       ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Once);
-      ImGui::SetNextWindowSize(ImVec2(180, 130));
+      ImGui::SetNextWindowSize(ImVec2(190, 185));
 
       ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoResize);
 
       {
-        // ImGui::Text("LOCAL ID: ");
-        // ImGui::SameLine();
+        ImGui::Text(" LOCAL ID:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(95);
+        ImGui::InputText("##local_id", mac_addr, IM_ARRAYSIZE(mac_addr),
+                         ImGuiInputTextFlags_CharsUppercase);
 
-        // ImGui::Selectable(mac_addr, false,
-        //                   ImGuiSelectableFlags_AllowDoubleClick);
+        ImGui::Text(" PASSWORD:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(95);
 
-        // if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
-        //   ImGui::SetClipboardText(mac_addr);
+        char input_password_tmp[7] = "";
+        strncpy(input_password_tmp, input_password, sizeof(input_password));
+
+        ImGui::InputTextWithHint("##password", "max 6 chars", input_password,
+                                 IM_ARRAYSIZE(input_password),
+                                 ImGuiInputTextFlags_CharsNoBlank);
+        if (strcmp(input_password_tmp, input_password)) {
+          cd_cache_file = fopen("cache.cd", "w+");
+          if (cd_cache_file) {
+            fseek(cd_cache_file, 0, SEEK_SET);
+            strncpy(cd_cache.password, input_password, sizeof(input_password));
+            fwrite(&cd_cache.password, sizeof(cd_cache.password), 1,
+                   cd_cache_file);
+            fclose(cd_cache_file);
+          }
+        }
+
+        // cd_cache_file = fopen("cache.cd", "w+");
+        // if (cd_cache_file) {
+        //   fseek(cd_cache_file, 0, SEEK_SET);
+        //   char cd_cache_password[16] = "123456";
+        //   strncpy(cd_cache.password, cd_cache_password,
+        //           sizeof(cd_cache_password));
+        //   fwrite(&cd_cache.password, sizeof(cd_cache.password), 1,
+        //          cd_cache_file);
+        //   fclose(cd_cache_file);
         // }
 
         // ImGui::Spacing();
@@ -688,8 +734,8 @@ int main() {
             }
             ImGui::Text("REMOTE ID:");
             ImGui::SameLine();
-            ImGui::SetNextItemWidth(110);
-            ImGui::InputTextWithHint("id_buf", "000002", remote_id,
+            ImGui::SetNextItemWidth(95);
+            ImGui::InputTextWithHint("##remote_id", "000002", remote_id,
                                      IM_ARRAYSIZE(remote_id),
                                      ImGuiInputTextFlags_AllowTabInput);
 
