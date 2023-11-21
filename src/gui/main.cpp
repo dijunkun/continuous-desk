@@ -87,7 +87,7 @@ bool received_frame = false;
 
 static bool connect_button_pressed = false;
 static const char *connect_label = "Connect";
-static char input_password[7] = "123456";
+static char input_password[7] = "";
 static FILE *cd_cache_file = nullptr;
 static CDCache cd_cache;
 
@@ -447,9 +447,8 @@ int main() {
   Init(peer_client, client_user_id.c_str());
 
   {
-    static char server_password[20] = "";
     std::string user_id = "S-" + std::string(GetMac(mac_addr));
-    CreateConnection(peer_server, mac_addr, server_password);
+    CreateConnection(peer_server, mac_addr, input_password);
 
     nv12_buffer = new char[NV12_BUFFER_SIZE];
 #ifdef _WIN32
@@ -581,7 +580,7 @@ int main() {
 
       const ImGuiViewport *main_viewport = ImGui::GetMainViewport();
       ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Once);
-      ImGui::SetNextWindowSize(ImVec2(190, 185));
+      ImGui::SetNextWindowSize(ImVec2(190, 200));
 
       ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoResize);
 
@@ -599,7 +598,7 @@ int main() {
         char input_password_tmp[7] = "";
         strncpy(input_password_tmp, input_password, sizeof(input_password));
 
-        ImGui::InputTextWithHint("##password", "max 6 chars", input_password,
+        ImGui::InputTextWithHint("##server_pwd", "max 6 chars", input_password,
                                  IM_ARRAYSIZE(input_password),
                                  ImGuiInputTextFlags_CharsNoBlank);
         if (strcmp(input_password_tmp, input_password)) {
@@ -611,115 +610,9 @@ int main() {
                    cd_cache_file);
             fclose(cd_cache_file);
           }
+          LeaveConnection(peer_server);
+          CreateConnection(peer_server, mac_addr, input_password);
         }
-
-        // cd_cache_file = fopen("cache.cd", "w+");
-        // if (cd_cache_file) {
-        //   fseek(cd_cache_file, 0, SEEK_SET);
-        //   char cd_cache_password[16] = "123456";
-        //   strncpy(cd_cache.password, cd_cache_password,
-        //           sizeof(cd_cache_password));
-        //   fwrite(&cd_cache.password, sizeof(cd_cache.password), 1,
-        //          cd_cache_file);
-        //   fclose(cd_cache_file);
-        // }
-
-        // ImGui::Spacing();
-
-        // ImGui::Text("PASSWORD: ");
-        // ImGui::SameLine();
-        // ImGui::SetNextItemWidth(110);
-        // static char server_password[20] = "";
-        // ImGui::InputTextWithHint("server_password", "000001",
-        // server_password,
-        //                          IM_ARRAYSIZE(server_password),
-        //                          ImGuiInputTextFlags_AllowTabInput);
-
-        //         ImGui::Spacing();
-        //         {
-        //           static bool online_button_pressed = false;
-        //           static const char *online_label = "Online";
-
-        //           if (ImGui::Button(online_label)) {
-        //             std::string user_id = "S-" +
-        //             std::string(GetMac(mac_addr));
-
-        //             if (strcmp(online_label, "Online") == 0) {
-        //               CreateConnection(peer_server, mac_addr,
-        //               server_password);
-
-        //               nv12_buffer = new char[NV12_BUFFER_SIZE];
-        // #ifdef _WIN32
-        //               screen_capture = new ScreenCaptureWgc();
-
-        //               RECORD_DESKTOP_RECT rect;
-        //               rect.left = 0;
-        //               rect.top = 0;
-        //               rect.right = GetSystemMetrics(SM_CXSCREEN);
-        //               rect.bottom = GetSystemMetrics(SM_CYSCREEN);
-
-        //               last_frame_time_ =
-        //               std::chrono::high_resolution_clock::now();
-        //               screen_capture->Init(
-        //                   rect, 60,
-        //                   [](unsigned char *data, int size, int width,
-        //                      int height) -> void {
-        //                     auto now_time =
-        //                     std::chrono::high_resolution_clock::now();
-        //                     std::chrono::duration<double> duration =
-        //                         now_time - last_frame_time_;
-        //                     auto tc = duration.count() * 1000;
-
-        //                     if (tc >= 0) {
-        //                       BGRAToNV12FFmpeg(data, width, height,
-        //                                        (unsigned char *)nv12_buffer);
-        //                       SendData(peer_server, DATA_TYPE::VIDEO,
-        //                                (const char *)nv12_buffer,
-        //                                NV12_BUFFER_SIZE);
-        //                       // std::cout << "Send" << std::endl;
-        //                       last_frame_time_ = now_time;
-        //                     }
-        //                   });
-
-        //               screen_capture->Start();
-
-        // #elif __linux__
-        //               screen_capture = new ScreenCaptureX11();
-
-        //               RECORD_DESKTOP_RECT rect;
-        //               rect.left = 0;
-        //               rect.top = 0;
-        //               rect.right = 0;
-        //               rect.bottom = 0;
-
-        //               last_frame_time_ =
-        //               std::chrono::high_resolution_clock::now();
-        //               screen_capture->Init(
-        //                   rect, 60,
-        //                   [](unsigned char *data, int size, int width,
-        //                      int height) -> void {
-        //                     auto now_time =
-        //                     std::chrono::high_resolution_clock::now();
-        //                     std::chrono::duration<double> duration =
-        //                         now_time - last_frame_time_;
-        //                     auto tc = duration.count() * 1000;
-
-        //                     if (tc >= 0) {
-        //                       SendData(peer_server, DATA_TYPE::VIDEO,
-        //                                (const char *)data, NV12_BUFFER_SIZE);
-        //                       last_frame_time_ = now_time;
-        //                     }
-        //                   });
-        //               screen_capture->Start();
-        // #endif
-        //             } else {
-        //               LeaveConnection(peer_server);
-        //             }
-        //             online_button_pressed = !online_button_pressed;
-        //             online_label = online_button_pressed ? "Offline" :
-        //             "Online";
-        //           }
-        //         }
 
         ImGui::Spacing();
 
@@ -735,20 +628,20 @@ int main() {
             ImGui::Text("REMOTE ID:");
             ImGui::SameLine();
             ImGui::SetNextItemWidth(95);
-            ImGui::InputTextWithHint("##remote_id", "000002", remote_id,
+            ImGui::InputTextWithHint("##remote_id", mac_addr, remote_id,
                                      IM_ARRAYSIZE(remote_id),
                                      ImGuiInputTextFlags_AllowTabInput);
 
             ImGui::Spacing();
 
-            // ImGui::Text("PASSWORD: ");
-            // ImGui::SameLine();
-            // ImGui::SetNextItemWidth(110);
+            ImGui::Text(" PASSWORD:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(95);
             static char client_password[20] = "";
-            // ImGui::InputTextWithHint("client_password", "000003",
-            //                          client_password,
-            //                          IM_ARRAYSIZE(client_password),
-            //                          ImGuiInputTextFlags_AllowTabInput);
+            ImGui::InputTextWithHint("##client_pwd", "max 6 chars",
+                                     client_password,
+                                     IM_ARRAYSIZE(client_password),
+                                     ImGuiInputTextFlags_CharsNoBlank);
 
             if (ImGui::Button(connect_label)) {
               if (strcmp(connect_label, "Connect") == 0 && !joined) {
@@ -775,7 +668,7 @@ int main() {
       ImGui::Spacing();
 
       {
-        if (ImGui::Button("Fix ratio")) {
+        if (ImGui::Button("Resize Window")) {
           SDL_GetWindowSize(window, &window_w, &window_h);
 
           if (window_h != window_w * 9 / 16) {
@@ -802,8 +695,6 @@ int main() {
       } else if (event.type == SDL_WINDOWEVENT &&
                  event.window.event == SDL_WINDOWEVENT_RESIZED) {
         SDL_GetWindowSize(window, &window_w, &window_h);
-        SDL_SetWindowSize(window, window_w, window_h);
-        // printf("Resize windows: %dx%d\n", window_w, window_h);
       } else if (event.type == SDL_WINDOWEVENT &&
                  event.window.event == SDL_WINDOWEVENT_CLOSE &&
                  event.window.windowID == SDL_GetWindowID(window)) {
