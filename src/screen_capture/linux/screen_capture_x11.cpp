@@ -2,6 +2,8 @@
 
 #include <iostream>
 
+#include "log.h"
+
 #define NV12_BUFFER_SIZE 1280 * 720 * 3 / 2
 unsigned char nv12_buffer_[NV12_BUFFER_SIZE];
 
@@ -26,9 +28,9 @@ int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
   // grabbing frame rate
   av_dict_set(&options_, "framerate", "30", 0);
   // Make the grabbed area follow the mouse
-  av_dict_set(&options_, "follow_mouse", "centered", 0);
+  // av_dict_set(&options_, "follow_mouse", "centered", 0);
   // Video frame size. The default is to capture the full screen
-  av_dict_set(&options_, "video_size", "1280x720", 0);
+  // av_dict_set(&options_, "video_size", "1280x720", 0);
   ifmt_ = (AVInputFormat *)av_find_input_format("x11grab");
   if (!ifmt_) {
     printf("Couldn't find_input_format\n");
@@ -71,21 +73,22 @@ int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
     return -1;
   }
 
+  const int screen_w = pFormatCtx_->streams[videoindex_]->codecpar->width;
+  const int screen_h = pFormatCtx_->streams[videoindex_]->codecpar->height;
+
   pFrame_ = av_frame_alloc();
   pFrameNv12_ = av_frame_alloc();
 
-  const int pixel_w = 1280, pixel_h = 720;
-  int screen_w = 1280, screen_h = 720;
-
-  screen_w = 1280;
-  screen_h = 720;
+  pFrame_->width = screen_w;
+  pFrame_->height = screen_h;
+  pFrameNv12_->width = 1280;
+  pFrameNv12_->height = 720;
 
   packet_ = (AVPacket *)av_malloc(sizeof(AVPacket));
 
-  img_convert_ctx_ =
-      sws_getContext(pCodecCtx_->width, pCodecCtx_->height, pCodecCtx_->pix_fmt,
-                     pCodecCtx_->width, pCodecCtx_->height, AV_PIX_FMT_NV12,
-                     SWS_BICUBIC, NULL, NULL, NULL);
+  img_convert_ctx_ = sws_getContext(
+      pFrame_->width, pFrame_->height, pCodecCtx_->pix_fmt, pFrameNv12_->width,
+      pFrameNv12_->height, AV_PIX_FMT_NV12, SWS_BICUBIC, NULL, NULL, NULL);
 
   return 0;
 }
@@ -101,16 +104,16 @@ int ScreenCaptureX11::Start() {
 
           if (!got_picture_) {
             av_image_fill_arrays(pFrameNv12_->data, pFrameNv12_->linesize,
-                                 nv12_buffer_, AV_PIX_FMT_NV12, pFrame_->width,
-                                 pFrame_->height, 1);
+                                 nv12_buffer_, AV_PIX_FMT_NV12,
+                                 pFrameNv12_->width, pFrameNv12_->height, 1);
 
             sws_scale(img_convert_ctx_, pFrame_->data, pFrame_->linesize, 0,
                       pFrame_->height, pFrameNv12_->data,
                       pFrameNv12_->linesize);
 
             _on_data((unsigned char *)nv12_buffer_,
-                     pFrame_->width * pFrame_->height * 3 / 2, pFrame_->width,
-                     pFrame_->height);
+                     pFrameNv12_->width * pFrameNv12_->height * 3 / 2,
+                     pFrameNv12_->width, pFrameNv12_->height);
           }
         }
       }

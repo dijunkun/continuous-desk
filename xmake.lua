@@ -38,7 +38,8 @@ target("log")
 
 target("screen_capture")
     set_kind("static")
-    add_packages("log", "ffmpeg")
+    add_deps("log")
+    add_packages("ffmpeg")
     if is_os("windows") then
         add_files("src/screen_capture/windows/*.cpp")
         add_includedirs("src/screen_capture/windows", {public = true})
