@@ -77,12 +77,23 @@ target("remote_desk")
         os.rm("$(projectdir)/out/lib")
     end)
 
--- target("linux_capture")
+-- target("screen_capture")
 --     set_kind("binary")
 --     add_packages("sdl2", "imgui",  "ffmpeg", "openh264")
---     add_files("test/linux_capture.cpp")
+--     add_files("test/screen_capture/linux_capture.cpp")
 --     add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
 --     "-lswscale", "-lavutil", "-lswresample",
 --     "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
 --     "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-lpthread", "-lSDL2", "-lopenh264",
---     "-ldl" ,{force = true})
+--     "-ldl", {force = true})
+
+target("audio_capture")
+    set_kind("binary")
+    add_packages("ffmpeg")
+    add_files("test/audio_capture/sdl2_audio_capture.cpp")
+    add_includedirs("test/audio_capture")
+    add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
+    "-lswscale", "-lavutil", "-lswresample",
+    "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
+    "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-lpthread", "-lSDL2", "-lopenh264",
+    "-ldl", {force = true})
