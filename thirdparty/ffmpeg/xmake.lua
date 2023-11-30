@@ -42,14 +42,15 @@ package("ffmpeg")
         add_configs("vdpau",            {description = "Enable vdpau library.", default = false, type = "boolean"})
         add_configs("hardcoded-tables", {description = "Enable hardcoded tables.", default = true, type = "boolean"})
         add_configs("asm",              {description = "Enable asm", default = false, type = "boolean"})
-        add_configs("libopenh264",      {description = "Enable libopenh264", default = true, type = "boolean"})
+        add_configs("libopenh264",      {description = "Enable libopenh264", default = false, type = "boolean"})
     end
 
     add_links("avfilter", "avdevice", "avformat", "avcodec", "swscale", "swresample", "avutil")
     if is_plat("macosx") then
         add_frameworks("CoreFoundation", "Foundation", "CoreVideo", "CoreMedia", "AudioToolbox", "VideoToolbox", "Security")
     elseif is_plat("linux") then
-        add_syslinks("pthread", "openh264")
+        -- add_syslinks("pthread", "openh264")
+        add_syslinks("pthread")
     end
 
     if is_plat("linux", "macosx") then
