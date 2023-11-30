@@ -18,6 +18,7 @@
 #include <unistd.h>
 #endif
 
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <fstream>
@@ -30,7 +31,11 @@ extern "C" {
 #include <libavdevice/avdevice.h>
 #include <libavfilter/avfilter.h>
 #include <libavformat/avformat.h>
+#include <libavutil/channel_layout.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/opt.h>
+#include <libavutil/samplefmt.h>
+#include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
 };
 
@@ -60,16 +65,70 @@ int window_w = 1280, window_h = 720;
 const int pixel_w = 1280, pixel_h = 720;
 
 unsigned char dst_buffer[pixel_w * pixel_h * 3 / 2];
+unsigned char audio_buffer[960];
 SDL_Texture *sdlTexture = nullptr;
 SDL_Renderer *sdlRenderer = nullptr;
 SDL_Rect sdlRect;
 SDL_Window *window;
+static SDL_AudioDeviceID input_dev;
+static SDL_AudioDeviceID output_dev;
 
 uint32_t start_time, end_time, elapsed_time;
 uint32_t frame_count = 0;
 int fps = 0;
+
+#if 1
+static Uint8 *buffer = 0;
+static int in_pos = 0;
+static int out_pos = 0;
+static std::atomic<bool> audio_buffer_fresh = false;
+static uint32_t last_ts = 0;
+
+char *out = "audio_old.pcm";
+// FILE *outfile = fopen(out, "wb+");
+
+int64_t src_ch_layout = AV_CH_LAYOUT_MONO;
+int src_rate = 48000;
+enum AVSampleFormat src_sample_fmt = AV_SAMPLE_FMT_S16;
+int src_nb_channels = 0;
+uint8_t **src_data = NULL;  // 二级指针
+int src_linesize;
+int src_nb_samples = 480;
+
+// 输出参数
+int64_t dst_ch_layout = AV_CH_LAYOUT_MONO;
+int dst_rate = 48000;
+enum AVSampleFormat dst_sample_fmt = AV_SAMPLE_FMT_S16;
+int dst_nb_channels = 0;
+uint8_t **dst_data = NULL;  // 二级指针
+int dst_linesize;
+int dst_nb_samples;
+int max_dst_nb_samples;
+
+// 输出文件
+const char *dst_filename = NULL;  // 保存输出的pcm到本地，然后播放验证
+FILE *dst_file;
+
+int dst_bufsize;
+
+// 重采样实例
+struct SwrContext *swr_ctx;
+
+double t;
+int ret;
+#endif
+
+int audio_len = 0;
+#define MAX_FRAME_SIZE 6 * 960
+#define CHANNELS 2
+unsigned char pcm_bytes[MAX_FRAME_SIZE * CHANNELS * 2];
+
 std::string window_title = "Remote Desk Client";
-std::string connection_status = "-";
+
+std::string server_connection_status = "-";
+std::string client_connection_status = "-";
+std::string server_signal_status = "-";
+std::string client_signal_status = "-";
 
 // Refresh Event
 #define REFRESH_EVENT (SDL_USEREVENT + 1)
@@ -90,6 +149,9 @@ static const char *connect_label = "Connect";
 static char input_password[7] = "";
 static FILE *cd_cache_file = nullptr;
 static CDCache cd_cache;
+static char mac_addr[16];
+static bool is_create_connection = false;
+static bool done = false;
 
 #ifdef _WIN32
 ScreenCaptureWgc *screen_capture = nullptr;
@@ -225,8 +287,76 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
   return 0;
 }
 
-void ReceiveVideoBuffer(const char *data, size_t size, const char *user_id,
-                        size_t user_id_size) {
+void SdlCaptureAudioIn(void *userdata, Uint8 *stream, int len) {
+  int64_t delay = swr_get_delay(swr_ctx, src_rate);
+  dst_nb_samples =
+      av_rescale_rnd(delay + src_nb_samples, dst_rate, src_rate, AV_ROUND_UP);
+  if (dst_nb_samples > max_dst_nb_samples) {
+    av_freep(&dst_data[0]);
+    ret = av_samples_alloc(dst_data, &dst_linesize, dst_nb_channels,
+                           dst_nb_samples, dst_sample_fmt, 1);
+    if (ret < 0) return;
+    max_dst_nb_samples = dst_nb_samples;
+  }
+
+  ret = swr_convert(swr_ctx, dst_data, dst_nb_samples,
+                    (const uint8_t **)&stream, src_nb_samples);
+  if (ret < 0) {
+    fprintf(stderr, "Error while converting\n");
+    return;
+  }
+  dst_bufsize = av_samples_get_buffer_size(&dst_linesize, dst_nb_channels, ret,
+                                           dst_sample_fmt, 1);
+  if (dst_bufsize < 0) {
+    fprintf(stderr, "Could not get sample buffer size\n");
+    return;
+  }
+
+  if (1) {
+    if ("ClientConnected" == client_connection_status) {
+      SendData(peer_client, DATA_TYPE::AUDIO, (const char *)dst_data[0],
+               dst_bufsize);
+    }
+
+    if ("ServerConnected" == server_connection_status) {
+      SendData(peer_server, DATA_TYPE::AUDIO, (const char *)dst_data[0],
+               dst_bufsize);
+    }
+  } else {
+    memcpy(audio_buffer, dst_data[0], dst_bufsize);
+    audio_len = dst_bufsize;
+    SDL_Delay(10);
+    audio_buffer_fresh = true;
+  }
+}
+
+void SdlCaptureAudioOut(void *userdata, Uint8 *stream, int len) {
+  // if ("ClientConnected" != client_connection_status) {
+  //   return;
+  // }
+
+  if (!audio_buffer_fresh) {
+    return;
+  }
+
+  SDL_memset(stream, 0, len);
+
+  if (audio_len == 0) {
+    return;
+  } else {
+  }
+
+  len = (len > audio_len ? audio_len : len);
+  SDL_MixAudioFormat(stream, audio_buffer, AUDIO_S16LSB, len,
+                     SDL_MIX_MAXVOLUME);
+  audio_buffer_fresh = false;
+}
+
+void ServerReceiveVideoBuffer(const char *data, size_t size,
+                              const char *user_id, size_t user_id_size) {}
+
+void ClientReceiveVideoBuffer(const char *data, size_t size,
+                              const char *user_id, size_t user_id_size) {
   // std::cout << "Receive: [" << user_id << "] " << std::endl;
   if (joined) {
     memcpy(dst_buffer, data, size);
@@ -238,14 +368,26 @@ void ReceiveVideoBuffer(const char *data, size_t size, const char *user_id,
   }
 }
 
-void ReceiveAudioBuffer(const char *data, size_t size, const char *user_id,
-                        size_t user_id_size) {
-  std::cout << "Receive audio, size " << size << ", user [" << user_id << "] "
-            << std::endl;
+void ServerReceiveAudioBuffer(const char *data, size_t size,
+                              const char *user_id, size_t user_id_size) {
+  // memset(audio_buffer, 0, size);
+  // memcpy(audio_buffer, data, size);
+  // audio_len = size;
+  audio_buffer_fresh = true;
+
+  SDL_QueueAudio(output_dev, data, size);
+  // printf("queue audio\n");
 }
 
-void ReceiveDataBuffer(const char *data, size_t size, const char *user_id,
-                       size_t user_id_size) {
+void ClientReceiveAudioBuffer(const char *data, size_t size,
+                              const char *user_id, size_t user_id_size) {
+  // std::cout << "Client receive audio, size " << size << ", user [" << user_id
+  //           << "] " << std::endl;
+  SDL_QueueAudio(output_dev, data, size);
+}
+
+void ServerReceiveDataBuffer(const char *data, size_t size, const char *user_id,
+                             size_t user_id_size) {
   std::string user(user_id, user_id_size);
 
   RemoteAction remote_action;
@@ -290,22 +432,183 @@ void ReceiveDataBuffer(const char *data, size_t size, const char *user_id,
 #endif
 }
 
-void ConnectionStatus(ConnectionStatus status) {
+void ClientReceiveDataBuffer(const char *data, size_t size, const char *user_id,
+                             size_t user_id_size) {
+  std::string user(user_id, user_id_size);
+
+  RemoteAction remote_action;
+  memcpy(&remote_action, data, sizeof(remote_action));
+
+  // std::cout << "remote_action: " << remote_action.type << " "
+  //           << remote_action.m.flag << " " << remote_action.m.x << " "
+  //           << remote_action.m.y << std::endl;
+#ifdef _WIN32
+  INPUT ip;
+
+  if (remote_action.type == ControlType::mouse) {
+    ip.type = INPUT_MOUSE;
+    ip.mi.dx = remote_action.m.x * screen_w / 1280;
+    ip.mi.dy = remote_action.m.y * screen_h / 720;
+    if (remote_action.m.flag == MouseFlag::left_down) {
+      ip.mi.dwFlags = MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_ABSOLUTE;
+    } else if (remote_action.m.flag == MouseFlag::left_up) {
+      ip.mi.dwFlags = MOUSEEVENTF_LEFTUP | MOUSEEVENTF_ABSOLUTE;
+    } else if (remote_action.m.flag == MouseFlag::right_down) {
+      ip.mi.dwFlags = MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_ABSOLUTE;
+    } else if (remote_action.m.flag == MouseFlag::right_up) {
+      ip.mi.dwFlags = MOUSEEVENTF_RIGHTUP | MOUSEEVENTF_ABSOLUTE;
+    } else {
+      ip.mi.dwFlags = MOUSEEVENTF_MOVE;
+    }
+    ip.mi.mouseData = 0;
+    ip.mi.time = 0;
+
+#if MOUSE_CONTROL
+    // Set cursor pos
+    SetCursorPos(ip.mi.dx, ip.mi.dy);
+    // Send the press
+    if (ip.mi.dwFlags != MOUSEEVENTF_MOVE) {
+      SendInput(1, &ip, sizeof(INPUT));
+    }
+#endif
+    // std::cout << "Receive data from [" << user << "], " << ip.type << " "
+    //           << ip.mi.dwFlags << " " << ip.mi.dx << " " << ip.mi.dy
+    //           << std::endl;
+  }
+#endif
+}
+
+void ServerSignalStatus(SignalStatus status) {
+  if (SignalStatus::SignalConnecting == status) {
+    server_signal_status = "ServerSignalConnecting";
+  } else if (SignalStatus::SignalConnected == status) {
+    server_signal_status = "ServerSignalConnected";
+  } else if (SignalStatus::SignalFailed == status) {
+    server_signal_status = "ServerSignalFailed";
+  } else if (SignalStatus::SignalClosed == status) {
+    server_signal_status = "ServerSignalClosed";
+  } else if (SignalStatus::SignalReconnecting == status) {
+    server_signal_status = "ServerSignalReconnecting";
+  }
+}
+
+void ClientSignalStatus(SignalStatus status) {
+  if (SignalStatus::SignalConnecting == status) {
+    client_signal_status = "ClientSignalConnecting";
+  } else if (SignalStatus::SignalConnected == status) {
+    client_signal_status = "ClientSignalConnected";
+  } else if (SignalStatus::SignalFailed == status) {
+    client_signal_status = "ClientSignalFailed";
+  } else if (SignalStatus::SignalClosed == status) {
+    client_signal_status = "ClientSignalClosed";
+  } else if (SignalStatus::SignalReconnecting == status) {
+    client_signal_status = "ClientSignalReconnecting";
+  }
+}
+
+void ServerConnectionStatus(ConnectionStatus status) {
   if (ConnectionStatus::Connecting == status) {
-    connection_status = "Connecting";
+    server_connection_status = "ServerConnecting";
   } else if (ConnectionStatus::Connected == status) {
-    connection_status = "Connected";
+    server_connection_status = "ServerConnected";
+  } else if (ConnectionStatus::Disconnected == status) {
+    server_connection_status = "ServerDisconnected";
   } else if (ConnectionStatus::Failed == status) {
-    connection_status = "Failed";
+    server_connection_status = "ServerFailed";
   } else if (ConnectionStatus::Closed == status) {
-    connection_status = "Closed";
+    server_connection_status = "ServerClosed";
   } else if (ConnectionStatus::IncorrectPassword == status) {
-    connection_status = "Incorrect password";
+    server_connection_status = "Incorrect password";
     if (connect_button_pressed) {
       connect_button_pressed = false;
       joined = false;
       connect_label = connect_button_pressed ? "Disconnect" : "Connect";
     }
+  }
+}
+
+void ClientConnectionStatus(ConnectionStatus status) {
+  if (ConnectionStatus::Connecting == status) {
+    client_connection_status = "ClientConnecting";
+  } else if (ConnectionStatus::Connected == status) {
+    client_connection_status = "ClientConnected";
+  } else if (ConnectionStatus::Disconnected == status) {
+    client_connection_status = "ClientDisconnected";
+  } else if (ConnectionStatus::Failed == status) {
+    client_connection_status = "ClientFailed";
+  } else if (ConnectionStatus::Closed == status) {
+    client_connection_status = "ClientClosed";
+  } else if (ConnectionStatus::IncorrectPassword == status) {
+    client_connection_status = "Incorrect password";
+    if (connect_button_pressed) {
+      connect_button_pressed = false;
+      joined = false;
+      connect_label = connect_button_pressed ? "Disconnect" : "Connect";
+    }
+  }
+}
+
+int initResampler() {
+  // dst_filename = "res.pcm";
+
+  // dst_file = fopen(dst_filename, "wb");
+  // if (!dst_file) {
+  //   fprintf(stderr, "Could not open destination file %s\n", dst_filename);
+  //   exit(1);
+  // }
+
+  // 创建重采样器
+  /* create resampler context */
+  swr_ctx = swr_alloc();
+  if (!swr_ctx) {
+    fprintf(stderr, "Could not allocate resampler context\n");
+    ret = AVERROR(ENOMEM);
+    return -1;
+  }
+
+  // 设置重采样参数
+  /* set options */
+  // 输入参数
+  av_opt_set_int(swr_ctx, "in_channel_layout", src_ch_layout, 0);
+  av_opt_set_int(swr_ctx, "in_sample_rate", src_rate, 0);
+  av_opt_set_sample_fmt(swr_ctx, "in_sample_fmt", src_sample_fmt, 0);
+  // 输出参数
+  av_opt_set_int(swr_ctx, "out_channel_layout", dst_ch_layout, 0);
+  av_opt_set_int(swr_ctx, "out_sample_rate", dst_rate, 0);
+  av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt", dst_sample_fmt, 0);
+
+  // 初始化重采样
+  /* initialize the resampling context */
+  if ((ret = swr_init(swr_ctx)) < 0) {
+    fprintf(stderr, "Failed to initialize the resampling context\n");
+    return -1;
+  }
+
+  /* allocate source and destination samples buffers */
+  // 计算出输入源的通道数量
+  src_nb_channels = av_get_channel_layout_nb_channels(src_ch_layout);
+  // 给输入源分配内存空间
+  ret = av_samples_alloc_array_and_samples(&src_data, &src_linesize,
+                                           src_nb_channels, src_nb_samples,
+                                           src_sample_fmt, 0);
+  if (ret < 0) {
+    fprintf(stderr, "Could not allocate source samples\n");
+    return -1;
+  }
+
+  // 计算输出采样数量
+  max_dst_nb_samples = dst_nb_samples =
+      av_rescale_rnd(src_nb_samples, dst_rate, src_rate, AV_ROUND_UP);
+
+  /* buffer is going to be directly written to a rawaudio file, no alignment */
+  dst_nb_channels = av_get_channel_layout_nb_channels(dst_ch_layout);
+  // 分配输出缓存内存
+  ret = av_samples_alloc_array_and_samples(&dst_data, &dst_linesize,
+                                           dst_nb_channels, dst_nb_samples,
+                                           dst_sample_fmt, 0);
+  if (ret < 0) {
+    fprintf(stderr, "Could not allocate destination samples\n");
+    return -1;
   }
 }
 
@@ -416,6 +719,13 @@ int BGRAToNV12FFmpeg(unsigned char *src_buffer, int width, int height,
 int main() {
   LOG_INFO("Remote desk");
 
+  last_ts = static_cast<uint32_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::high_resolution_clock::now().time_since_epoch())
+          .count());
+
+  initResampler();
+
   cd_cache_file = fopen("cache.cd", "r+");
   if (cd_cache_file) {
     fseek(cd_cache_file, 0, SEEK_SET);
@@ -424,91 +734,119 @@ int main() {
     strncpy(input_password, cd_cache.password, sizeof(cd_cache.password));
   }
 
-  std::string default_cfg_path = "../../../../config/config.ini";
-  std::ifstream f(default_cfg_path.c_str());
+  std::thread rtc_thread([] {
+    std::string default_cfg_path = "../../../../config/config.ini";
+    std::ifstream f(default_cfg_path.c_str());
 
-  Params params;
-  params.cfg_path = f.good() ? "../../../../config/config.ini" : "config.ini";
-  params.on_receive_video_buffer = ReceiveVideoBuffer;
-  params.on_receive_audio_buffer = ReceiveAudioBuffer;
-  params.on_receive_data_buffer = ReceiveDataBuffer;
-  params.on_connection_status = ConnectionStatus;
+    Params server_params;
+    server_params.cfg_path =
+        f.good() ? "../../../../config/config.ini" : "config.ini";
+    server_params.on_receive_video_buffer = ServerReceiveVideoBuffer;
+    server_params.on_receive_audio_buffer = ServerReceiveAudioBuffer;
+    server_params.on_receive_data_buffer = ServerReceiveDataBuffer;
+    server_params.on_signal_status = ServerSignalStatus;
+    server_params.on_connection_status = ServerConnectionStatus;
 
-  std::string transmission_id = "000001";
-  char mac_addr[16];
-  GetMac(mac_addr);
+    Params client_params;
+    client_params.cfg_path =
+        f.good() ? "../../../../config/config.ini" : "config.ini";
+    client_params.on_receive_video_buffer = ClientReceiveVideoBuffer;
+    client_params.on_receive_audio_buffer = ClientReceiveAudioBuffer;
+    client_params.on_receive_data_buffer = ClientReceiveDataBuffer;
+    client_params.on_signal_status = ClientSignalStatus;
+    client_params.on_connection_status = ClientConnectionStatus;
 
-  peer_server = CreatePeer(&params);
-  std::string server_user_id = "S-" + std::string(GetMac(mac_addr));
-  Init(peer_server, server_user_id.c_str());
+    std::string transmission_id = "000001";
+    GetMac(mac_addr);
 
-  peer_client = CreatePeer(&params);
-  std::string client_user_id = "C-" + std::string(GetMac(mac_addr));
-  Init(peer_client, client_user_id.c_str());
+    peer_server = CreatePeer(&server_params);
+    LOG_INFO("Create peer_server");
+    std::string server_user_id = "S-" + std::string(GetMac(mac_addr));
+    Init(peer_server, server_user_id.c_str());
+    LOG_INFO("peer_server init finish");
 
-  {
-    std::string user_id = "S-" + std::string(GetMac(mac_addr));
-    CreateConnection(peer_server, mac_addr, input_password);
+    peer_client = CreatePeer(&client_params);
+    LOG_INFO("Create peer_client");
+    std::string client_user_id = "C-" + std::string(GetMac(mac_addr));
+    Init(peer_client, client_user_id.c_str());
+    LOG_INFO("peer_client init finish");
 
-    nv12_buffer = new char[NV12_BUFFER_SIZE];
+    {
+      while ("ServerSignalConnected" != server_signal_status && !done) {
+      }
+
+      if (done) {
+        return;
+      }
+
+      std::string user_id = "S-" + std::string(GetMac(mac_addr));
+      is_create_connection =
+          CreateConnection(peer_server, mac_addr, input_password) ? false
+                                                                  : true;
+
+      nv12_buffer = new char[NV12_BUFFER_SIZE];
 #ifdef _WIN32
-    screen_capture = new ScreenCaptureWgc();
+      screen_capture = new ScreenCaptureWgc();
 
-    RECORD_DESKTOP_RECT rect;
-    rect.left = 0;
-    rect.top = 0;
-    rect.right = GetSystemMetrics(SM_CXSCREEN);
-    rect.bottom = GetSystemMetrics(SM_CYSCREEN);
+      RECORD_DESKTOP_RECT rect;
+      rect.left = 0;
+      rect.top = 0;
+      rect.right = GetSystemMetrics(SM_CXSCREEN);
+      rect.bottom = GetSystemMetrics(SM_CYSCREEN);
 
-    last_frame_time_ = std::chrono::high_resolution_clock::now();
-    screen_capture->Init(
-        rect, 60,
-        [](unsigned char *data, int size, int width, int height) -> void {
-          auto now_time = std::chrono::high_resolution_clock::now();
-          std::chrono::duration<double> duration = now_time - last_frame_time_;
-          auto tc = duration.count() * 1000;
+      last_frame_time_ = std::chrono::high_resolution_clock::now();
+      screen_capture->Init(
+          rect, 60,
+          [](unsigned char *data, int size, int width, int height) -> void {
+            auto now_time = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> duration =
+                now_time - last_frame_time_;
+            auto tc = duration.count() * 1000;
 
-          if (tc >= 0) {
-            BGRAToNV12FFmpeg(data, width, height, (unsigned char *)nv12_buffer);
-            SendData(peer_server, DATA_TYPE::VIDEO, (const char *)nv12_buffer,
-                     NV12_BUFFER_SIZE);
-            // std::cout << "Send" << std::endl;
-            last_frame_time_ = now_time;
-          }
-        });
+            if (tc >= 0) {
+              BGRAToNV12FFmpeg(data, width, height,
+                               (unsigned char *)nv12_buffer);
+              SendData(peer_server, DATA_TYPE::VIDEO, (const char *)nv12_buffer,
+                       NV12_BUFFER_SIZE);
+              // std::cout << "Send" << std::endl;
+              last_frame_time_ = now_time;
+            }
+          });
 
-    screen_capture->Start();
+      screen_capture->Start();
 
 #elif __linux__
-    screen_capture = new ScreenCaptureX11();
+      screen_capture = new ScreenCaptureX11();
 
-    RECORD_DESKTOP_RECT rect;
-    rect.left = 0;
-    rect.top = 0;
-    rect.right = 0;
-    rect.bottom = 0;
+      RECORD_DESKTOP_RECT rect;
+      rect.left = 0;
+      rect.top = 0;
+      rect.right = 0;
+      rect.bottom = 0;
 
-    last_frame_time_ = std::chrono::high_resolution_clock::now();
-    screen_capture->Init(
-        rect, 60,
-        [](unsigned char *data, int size, int width, int height) -> void {
-          auto now_time = std::chrono::high_resolution_clock::now();
-          std::chrono::duration<double> duration = now_time - last_frame_time_;
-          auto tc = duration.count() * 1000;
+      last_frame_time_ = std::chrono::high_resolution_clock::now();
+      screen_capture->Init(
+          rect, 60,
+          [](unsigned char *data, int size, int width, int height) -> void {
+            auto now_time = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> duration =
+                now_time - last_frame_time_;
+            auto tc = duration.count() * 1000;
 
-          if (tc >= 0) {
-            SendData(peer_server, DATA_TYPE::VIDEO, (const char *)data,
-                     NV12_BUFFER_SIZE);
-            last_frame_time_ = now_time;
-          }
-        });
-    screen_capture->Start();
+            if (tc >= 0) {
+              SendData(peer_server, DATA_TYPE::VIDEO, (const char *)data,
+                       NV12_BUFFER_SIZE);
+              last_frame_time_ = now_time;
+            }
+          });
+      screen_capture->Start();
 #endif
-  }
+    }
+  });
 
   // Setup SDL
-  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) !=
-      0) {
+  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER |
+               SDL_INIT_GAMECONTROLLER) != 0) {
     printf("Error: %s\n", SDL_GetError());
     return -1;
   }
@@ -543,6 +881,38 @@ int main() {
   sdlTexture = SDL_CreateTexture(sdlRenderer, pixformat,
                                  SDL_TEXTUREACCESS_STREAMING, pixel_w, pixel_h);
 
+  // Audio
+  SDL_AudioSpec want_in, have_in, want_out, have_out;
+  SDL_zero(want_in);
+  want_in.freq = 48000;
+  want_in.format = AUDIO_S16LSB;
+  want_in.channels = 1;
+  want_in.samples = 480;
+  want_in.callback = SdlCaptureAudioIn;
+
+  input_dev = SDL_OpenAudioDevice(NULL, 1, &want_in, &have_in, 0);
+  if (input_dev == 0) {
+    SDL_Log("Failed to open input: %s", SDL_GetError());
+    return 1;
+  }
+
+  SDL_zero(want_out);
+  want_out.freq = 48000;
+  want_out.format = AUDIO_S16LSB;
+  want_out.channels = 1;
+  // want_out.silence = 0;
+  want_out.samples = 480;
+  want_out.callback = NULL;
+
+  output_dev = SDL_OpenAudioDevice(NULL, 0, &want_out, &have_out, 0);
+  if (output_dev == 0) {
+    SDL_Log("Failed to open input: %s", SDL_GetError());
+    return 1;
+  }
+
+  SDL_PauseAudioDevice(input_dev, 0);
+  SDL_PauseAudioDevice(output_dev, 0);
+
   // Setup Dear ImGui context
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
@@ -567,7 +937,6 @@ int main() {
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   // Main loop
-  bool done = false;
   while (!done) {
     // Start the Dear ImGui frame
     ImGui_ImplSDLRenderer2_NewFrame();
@@ -644,18 +1013,29 @@ int main() {
                                      ImGuiInputTextFlags_CharsNoBlank);
 
             if (ImGui::Button(connect_label)) {
-              if (strcmp(connect_label, "Connect") == 0 && !joined) {
-                std::string user_id = "C-" + std::string(GetMac(mac_addr));
-                JoinConnection(peer_client, remote_id, client_password);
-                joined = true;
-              } else if (strcmp(connect_label, "Disconnect") == 0 && joined) {
-                LeaveConnection(peer_client);
-                joined = false;
-                received_frame = false;
-              }
+              int ret = -1;
+              if ("ClientSignalConnected" == client_signal_status) {
+                if (strcmp(connect_label, "Connect") == 0 && !joined) {
+                  std::string user_id = "C-" + std::string(GetMac(mac_addr));
+                  ret = JoinConnection(peer_client, remote_id, client_password);
+                  if (0 == ret) {
+                    joined = true;
+                  }
+                } else if (strcmp(connect_label, "Disconnect") == 0 && joined) {
+                  ret = LeaveConnection(peer_client);
+                  memset(audio_buffer, 0, 960);
+                  if (0 == ret) {
+                    joined = false;
+                    received_frame = false;
+                  }
+                }
 
-              connect_button_pressed = !connect_button_pressed;
-              connect_label = connect_button_pressed ? "Disconnect" : "Connect";
+                if (0 == ret) {
+                  connect_button_pressed = !connect_button_pressed;
+                  connect_label =
+                      connect_button_pressed ? "Disconnect" : "Connect";
+                }
+              }
             }
           }
         }
@@ -733,7 +1113,9 @@ int main() {
       fps = frame_count / (elapsed_time / 1000);
       frame_count = 0;
       window_title = "Remote Desk Client FPS [" + std::to_string(fps) +
-                     "] status [" + connection_status + "]";
+                     "] status [" + server_signal_status + "|" +
+                     client_signal_status + "|" + server_connection_status +
+                     "|" + client_connection_status + "]";
       // For MacOS, UI frameworks can only be called from the main thread
       SDL_SetWindowTitle(window, window_title.c_str());
       start_time = end_time;
@@ -741,7 +1123,18 @@ int main() {
   }
 
   // Cleanup
-  LeaveConnection(peer_server);
+
+  if (is_create_connection) {
+    LeaveConnection(peer_server);
+  }
+
+  if (joined) {
+    LeaveConnection(peer_client);
+  }
+
+  rtc_thread.join();
+  SDL_CloseAudioDevice(output_dev);
+  SDL_CloseAudioDevice(input_dev);
 
   ImGui_ImplSDLRenderer2_Shutdown();
   ImGui_ImplSDL2_Shutdown();
@@ -749,6 +1142,8 @@ int main() {
 
   SDL_DestroyRenderer(sdlRenderer);
   SDL_DestroyWindow(window);
+
+  SDL_CloseAudio();
   SDL_Quit();
 
   return 0;

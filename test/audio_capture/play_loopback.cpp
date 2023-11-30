@@ -24,14 +24,14 @@ static int out_pos = 0;
 
 int64_t src_ch_layout = AV_CH_LAYOUT_MONO;
 int src_rate = 48000;
-enum AVSampleFormat src_sample_fmt = AV_SAMPLE_FMT_FLT;
+enum AVSampleFormat src_sample_fmt = AV_SAMPLE_FMT_S16;
 int src_nb_channels = 0;
 uint8_t **src_data = NULL;  // 二级指针
 int src_linesize;
 int src_nb_samples = 480;
 
 // 输出参数
-int64_t dst_ch_layout = AV_CH_LAYOUT_STEREO;
+int64_t dst_ch_layout = AV_CH_LAYOUT_MONO;
 int dst_rate = 48000;
 enum AVSampleFormat dst_sample_fmt = AV_SAMPLE_FMT_S16;
 int dst_nb_channels = 0;
@@ -39,6 +39,8 @@ uint8_t **dst_data = NULL;  // 二级指针
 int dst_linesize;
 int dst_nb_samples;
 int max_dst_nb_samples;
+static unsigned char audio_buffer[960 * 3];
+static int audio_len = 0;
 
 // 输出文件
 const char *dst_filename = NULL;  // 保存输出的pcm到本地，然后播放验证
@@ -58,44 +60,46 @@ FILE *outfile = fopen(out, "wb+");
 
 void cb_in(void *userdata, Uint8 *stream, int len) {
   // If len < 4, the printf below will probably segfault
-  {
-    fwrite(stream, 1, len, outfile);
-    fflush(outfile);
-  }
-  {
-    int64_t delay = swr_get_delay(swr_ctx, src_rate);
-    dst_nb_samples =
-        av_rescale_rnd(delay + src_nb_samples, dst_rate, src_rate, AV_ROUND_UP);
-    if (dst_nb_samples > max_dst_nb_samples) {
-      av_freep(&dst_data[0]);
-      ret = av_samples_alloc(dst_data, &dst_linesize, dst_nb_channels,
-                             dst_nb_samples, dst_sample_fmt, 1);
-      if (ret < 0) return;
-      max_dst_nb_samples = dst_nb_samples;
-    }
+  // SDL_QueueAudio(output_dev, stream, len);
 
-    ret = swr_convert(swr_ctx, dst_data, dst_nb_samples,
-                      (const uint8_t **)&stream, src_nb_samples);
-    if (ret < 0) {
-      fprintf(stderr, "Error while converting\n");
-      return;
-    }
-    dst_bufsize = av_samples_get_buffer_size(&dst_linesize, dst_nb_channels,
-                                             ret, dst_sample_fmt, 1);
-    if (dst_bufsize < 0) {
-      fprintf(stderr, "Could not get sample buffer size\n");
-      return;
-    }
-    printf("t:%f in:%d out:%d\n", t, src_nb_samples, ret);
-    fwrite(dst_data[0], 1, dst_bufsize, dst_file);
+  int64_t delay = swr_get_delay(swr_ctx, src_rate);
+  dst_nb_samples =
+      av_rescale_rnd(delay + src_nb_samples, dst_rate, src_rate, AV_ROUND_UP);
+  if (dst_nb_samples > max_dst_nb_samples) {
+    av_freep(&dst_data[0]);
+    ret = av_samples_alloc(dst_data, &dst_linesize, dst_nb_channels,
+                           dst_nb_samples, dst_sample_fmt, 1);
+    if (ret < 0) return;
+    max_dst_nb_samples = dst_nb_samples;
   }
+
+  ret = swr_convert(swr_ctx, dst_data, dst_nb_samples,
+                    (const uint8_t **)&stream, src_nb_samples);
+  if (ret < 0) {
+    fprintf(stderr, "Error while converting\n");
+    return;
+  }
+  dst_bufsize = av_samples_get_buffer_size(&dst_linesize, dst_nb_channels, ret,
+                                           dst_sample_fmt, 1);
+  if (dst_bufsize < 0) {
+    fprintf(stderr, "Could not get sample buffer size\n");
+    return;
+  }
+  printf("t:%f in:%d out:%d %d\n", t, src_nb_samples, ret, len);
+
+  memcpy(audio_buffer, dst_data[0], len);
+  // SDL_QueueAudio(output_dev, dst_data[0], len);
+  audio_len = len;
 }
 
 void cb_out(void *userdata, Uint8 *stream, int len) {
   // If len < 4, the printf below will probably segfault
-
-  SDL_memcpy(buffer + out_pos, stream, len);
-  out_pos += len;
+  printf("cb_out len = %d\n", len);
+  SDL_memset(stream, 0, len);
+  if (audio_len == 0) return;
+  len = (len > audio_len ? audio_len : len);
+  SDL_MixAudioFormat(stream, audio_buffer, AUDIO_S16LSB, len,
+                     SDL_MIX_MAXVOLUME);
 }
 
 int init() {
@@ -177,13 +181,12 @@ int main() {
 
   SDL_zero(want_in);
   want_in.freq = 48000;
-  want_in.format = AUDIO_F32LSB;
-  want_in.channels = 2;
-  want_in.samples = 960;
+  want_in.format = AUDIO_S16LSB;
+  want_in.channels = 1;
+  want_in.samples = 480;
   want_in.callback = cb_in;
 
-  input_dev = SDL_OpenAudioDevice(NULL, 1, &want_in, &have_in,
-                                  SDL_AUDIO_ALLOW_ANY_CHANGE);
+  input_dev = SDL_OpenAudioDevice(NULL, 1, &want_in, &have_in, 0);
 
   printf("%d %d %d %d\n", have_in.freq, have_in.format, have_in.channels,
          have_in.samples);
@@ -192,10 +195,27 @@ int main() {
     return 1;
   }
 
+  SDL_zero(want_out);
+  want_out.freq = 48000;
+  want_out.format = AUDIO_S16LSB;
+  want_out.channels = 1;
+  want_out.samples = 480;
+  want_out.callback = cb_out;
+
+  output_dev = SDL_OpenAudioDevice(NULL, 0, &want_out, &have_out, 0);
+
+  printf("%d %d %d %d\n", have_out.freq, have_out.format, have_out.channels,
+         have_out.samples);
+  if (output_dev == 0) {
+    SDL_Log("Failed to open input: %s", SDL_GetError());
+    return 1;
+  }
+
   SDL_PauseAudioDevice(input_dev, 0);
   SDL_PauseAudioDevice(output_dev, 0);
 
-  SDL_Delay(5000);
+  while (1) {
+  }
 
   SDL_CloseAudioDevice(output_dev);
   SDL_CloseAudioDevice(input_dev);
