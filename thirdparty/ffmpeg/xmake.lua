@@ -45,7 +45,7 @@ package("ffmpeg")
         add_configs("libopenh264",      {description = "Enable libopenh264", default = false, type = "boolean"})
     end
 
-    add_links("avfilter", "avdevice", "avformat", "avcodec", "swscale", "swresample", "avutil")
+    add_links("avfilter", "avdevice", "avformat", "avcodec", "swscale", "swresample", "avutil", "postproc")
     if is_plat("macosx") then
         add_frameworks("CoreFoundation", "Foundation", "CoreVideo", "CoreMedia", "AudioToolbox", "VideoToolbox", "Security")
     elseif is_plat("linux") then

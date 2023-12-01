@@ -23,7 +23,6 @@ if is_os("windows") then
 elseif is_os("linux") then
     add_requires("ffmpeg 5.1.2", {system = false})
     add_packages("ffmpeg")
-    add_links("SDL2")
     add_syslinks("pthread", "dl")
     add_links("SDL2")
     add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
@@ -33,8 +32,11 @@ elseif is_os("linux") then
         {force = true})
 elseif is_os("macosx") then
     add_requires("ffmpeg 5.1.2", {system = false})
-    add_packages("ffmpeg")
-    add_links("SDL2")
+    add_requires("brew::libxcb")
+    add_packages("ffmpeg", "brew::libxcb")
+    add_links("SDL2", "SDL2main", "postproc")
+    add_ldflags("-Wl,-ld_classic")
+    add_frameworks("OpenGL")
 end
 
 add_packages("spdlog", "sdl2", "imgui")
@@ -55,7 +57,7 @@ target("screen_capture")
         add_includedirs("src/screen_capture/windows", {public = true})
     elseif is_os("macosx") then
          add_files("src/screen_capture/macosx/*.cpp")
-         add_includedirs("ssrc/creen_capture/macosx", {public = true})
+         add_includedirs("src/screen_capture/macosx", {public = true})
     elseif is_os("linux") then
          add_files("src/screen_capture/linux/*.cpp")
          add_includedirs("src/screen_capture/linux", {public = true})
@@ -84,29 +86,39 @@ target("remote_desk")
 --     "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-lpthread", "-lSDL2", "-lopenh264",
 --     "-ldl", {force = true})
 
-target("audio_capture")
-    set_kind("binary")
-    add_packages("ffmpeg")
-    add_files("test/audio_capture/sdl2_audio_capture.cpp")
-    add_includedirs("test/audio_capture")
-    add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
-    "-lswscale", "-lavutil", "-lswresample",
-    "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
-    "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-lpthread", "-lSDL2", "-lopenh264",
-    "-ldl", {force = true})
-    add_links("Shlwapi", "Strmiids", "Vfw32", "Secur32", "Mfuuid")
+-- target("screen_capture")
+--     set_kind("binary")
+--     add_packages("sdl2", "imgui",  "ffmpeg", "openh264")
+--     add_files("test/screen_capture/mac_capture.cpp")
+--     add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
+--     "-lswscale", "-lavutil", "-lswresample",
+--     "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
+--     "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-lpthread", "-lSDL2", "-lopenh264",
+--     "-ldl", {force = true})
 
-target("play_audio")
-    set_kind("binary")
-    add_packages("ffmpeg")
-    add_files("test/audio_capture/play_loopback.cpp")
-    add_includedirs("test/audio_capture")
-    add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
-    "-lswscale", "-lavutil", "-lswresample",
-    "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
-    "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-lpthread", "-lSDL2", "-lopenh264",
-    "-ldl", {force = true})
-    add_links("Shlwapi", "Strmiids", "Vfw32", "Secur32", "Mfuuid")
+-- target("audio_capture")
+--     set_kind("binary")
+--     add_packages("ffmpeg")
+--     add_files("test/audio_capture/sdl2_audio_capture.cpp")
+--     add_includedirs("test/audio_capture")
+--     add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
+--     "-lswscale", "-lavutil", "-lswresample",
+--     "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
+--     "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-lpthread", "-lSDL2", "-lopenh264",
+--     "-ldl", {force = true})
+--     add_links("Shlwapi", "Strmiids", "Vfw32", "Secur32", "Mfuuid")
+
+-- target("play_audio")
+--     set_kind("binary")
+--     add_packages("ffmpeg")
+--     add_files("test/audio_capture/play_loopback.cpp")
+--     add_includedirs("test/audio_capture")
+--     add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
+--     "-lswscale", "-lavutil", "-lswresample",
+--     "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
+--     "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-lpthread", "-lSDL2", "-lopenh264",
+--     "-ldl", {force = true})
+--     add_links("Shlwapi", "Strmiids", "Vfw32", "Secur32", "Mfuuid")
 
 -- target("audio_capture")
 --     set_kind("binary")

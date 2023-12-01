@@ -85,7 +85,7 @@ static std::atomic<bool> audio_buffer_fresh = false;
 static uint32_t last_ts = 0;
 
 char *out = "audio_old.pcm";
-// FILE *outfile = fopen(out, "wb+");
+FILE *outfile = fopen(out, "wb+");
 
 int64_t src_ch_layout = AV_CH_LAYOUT_MONO;
 int src_rate = 48000;
