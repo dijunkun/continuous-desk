@@ -34,6 +34,7 @@ elseif is_os("linux") then
 elseif is_os("macosx") then
     add_requires("ffmpeg 5.1.2", {system = false})
     add_packages("ffmpeg")
+    add_links("SDL2")
 end
 
 add_packages("spdlog", "sdl2", "imgui")
