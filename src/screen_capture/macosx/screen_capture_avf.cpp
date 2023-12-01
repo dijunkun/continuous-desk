@@ -1,4 +1,4 @@
-#include "screen_capture_x11.h"
+#include "screen_capture_avf.h"
 
 #include <iostream>
 
@@ -7,21 +7,17 @@
 #define NV12_BUFFER_SIZE 1280 * 720 * 3 / 2
 unsigned char nv12_buffer_[NV12_BUFFER_SIZE];
 
-ScreenCaptureX11::ScreenCaptureX11() {}
+ScreenCaptureAvf::ScreenCaptureAvf() {}
 
-ScreenCaptureX11::~ScreenCaptureX11()
-{
-  if (capture_thread_->joinable())
-  {
+ScreenCaptureAvf::~ScreenCaptureAvf() {
+  if (capture_thread_->joinable()) {
     capture_thread_->join();
   }
 }
 
-int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
-                           cb_desktop_data cb)
-{
-  if (cb)
-  {
+int ScreenCaptureAvf::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
+                           cb_desktop_data cb) {
+  if (cb) {
     _on_data = cb;
   }
 
@@ -37,33 +33,29 @@ int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
   // Video frame size. The default is to capture the full screen
   // av_dict_set(&options_, "video_size", "1280x720", 0);
   ifmt_ = (AVInputFormat *)av_find_input_format("avfoundation");
-  if (!ifmt_)
-  {
+  if (!ifmt_) {
     printf("Couldn't find_input_format\n");
   }
 
   // Grab at position 10,20
-  if (avformat_open_input(&pFormatCtx_, "Capture screen 0", ifmt_, &options_) != 0)
-  {
+  if (avformat_open_input(&pFormatCtx_, "Capture screen 0", ifmt_, &options_) !=
+      0) {
     printf("Couldn't open input stream.\n");
     return -1;
   }
 
-  if (avformat_find_stream_info(pFormatCtx_, NULL) < 0)
-  {
+  if (avformat_find_stream_info(pFormatCtx_, NULL) < 0) {
     printf("Couldn't find stream information.\n");
     return -1;
   }
 
   videoindex_ = -1;
   for (i_ = 0; i_ < pFormatCtx_->nb_streams; i_++)
-    if (pFormatCtx_->streams[i_]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
-    {
+    if (pFormatCtx_->streams[i_]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
       videoindex_ = i_;
       break;
     }
-  if (videoindex_ == -1)
-  {
+  if (videoindex_ == -1) {
     printf("Didn't find a video stream.\n");
     return -1;
   }
@@ -74,13 +66,11 @@ int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
   avcodec_parameters_to_context(pCodecCtx_, pCodecParam_);
 
   pCodec_ = const_cast<AVCodec *>(avcodec_find_decoder(pCodecCtx_->codec_id));
-  if (pCodec_ == NULL)
-  {
+  if (pCodec_ == NULL) {
     printf("Codec not found.\n");
     return -1;
   }
-  if (avcodec_open2(pCodecCtx_, pCodec_, NULL) < 0)
-  {
+  if (avcodec_open2(pCodecCtx_, pCodec_, NULL) < 0) {
     printf("Could not open codec.\n");
     return -1;
   }
@@ -105,10 +95,8 @@ int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
   return 0;
 }
 
-int ScreenCaptureX11::Start()
-{
-  capture_thread_.reset(new std::thread([this]()
-                                        {
+int ScreenCaptureAvf::Start() {
+  capture_thread_.reset(new std::thread([this]() {
     while (1) {
       if (av_read_frame(pFormatCtx_, packet_) >= 0) {
         if (packet_->stream_index == videoindex_) {
@@ -131,17 +119,18 @@ int ScreenCaptureX11::Start()
           }
         }
       }
-    } }));
+    }
+  }));
 
   return 0;
 }
 
-int ScreenCaptureX11::Pause() { return 0; }
+int ScreenCaptureAvf::Pause() { return 0; }
 
-int ScreenCaptureX11::Resume() { return 0; }
+int ScreenCaptureAvf::Resume() { return 0; }
 
-int ScreenCaptureX11::Stop() { return 0; }
+int ScreenCaptureAvf::Stop() { return 0; }
 
-void ScreenCaptureX11::OnFrame() {}
+void ScreenCaptureAvf::OnFrame() {}
 
-void ScreenCaptureX11::CleanUp() {}
+void ScreenCaptureAvf::CleanUp() {}

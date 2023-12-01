@@ -1,5 +1,11 @@
-#ifndef _SCREEN_CAPTURE_X11_H_
-#define _SCREEN_CAPTURE_X11_H_
+/*
+ * @Author: DI JUNKUN
+ * @Date: 2023-12-01
+ * Copyright (c) 2023 by DI JUNKUN, All Rights Reserved.
+ */
+
+#ifndef _SCREEN_CAPTURE_AVF_H_
+#define _SCREEN_CAPTURE_AVF_H_
 
 #include <atomic>
 #include <functional>
@@ -28,10 +34,10 @@ typedef struct {
 typedef std::function<void(unsigned char *, int, int, int)> cb_desktop_data;
 typedef std::function<void(int)> cb_desktop_error;
 
-class ScreenCaptureX11 {
+class ScreenCaptureAvf {
  public:
-  ScreenCaptureX11();
-  ~ScreenCaptureX11();
+  ScreenCaptureAvf();
+  ~ScreenCaptureAvf();
 
  public:
   int Init(const RECORD_DESKTOP_RECT &rect, const int fps, cb_desktop_data cb);

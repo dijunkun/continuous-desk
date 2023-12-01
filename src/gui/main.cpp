@@ -49,6 +49,8 @@ extern "C" {
 #include "screen_capture_wgc.h"
 #elif __linux__
 #include "screen_capture_x11.h"
+#elif __APPLE__
+#include "screen_capture_avf.h"
 #endif
 #include "../../thirdparty/projectx/src/interface/x.h"
 
@@ -157,6 +159,8 @@ static bool done = false;
 ScreenCaptureWgc *screen_capture = nullptr;
 #elif __linux__
 ScreenCaptureX11 *screen_capture = nullptr;
+#elif __APPLE__
+ScreenCaptureAvf *screen_capture = nullptr;
 #endif
 
 char *nv12_buffer = nullptr;
@@ -817,6 +821,31 @@ int main() {
 
 #elif __linux__
       screen_capture = new ScreenCaptureX11();
+
+      RECORD_DESKTOP_RECT rect;
+      rect.left = 0;
+      rect.top = 0;
+      rect.right = 0;
+      rect.bottom = 0;
+
+      last_frame_time_ = std::chrono::high_resolution_clock::now();
+      screen_capture->Init(
+          rect, 60,
+          [](unsigned char *data, int size, int width, int height) -> void {
+            auto now_time = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> duration =
+                now_time - last_frame_time_;
+            auto tc = duration.count() * 1000;
+
+            if (tc >= 0) {
+              SendData(peer_server, DATA_TYPE::VIDEO, (const char *)data,
+                       NV12_BUFFER_SIZE);
+              last_frame_time_ = now_time;
+            }
+          });
+      screen_capture->Start();
+#elif __APPLE__
+      screen_capture = new ScreenCaptureAvf();
 
       RECORD_DESKTOP_RECT rect;
       rect.left = 0;
