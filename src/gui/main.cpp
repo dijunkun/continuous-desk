@@ -560,6 +560,13 @@ void ClientConnectionStatus(ConnectionStatus status) {
       joined = false;
       connect_label = connect_button_pressed ? "Disconnect" : "Connect";
     }
+  } else if (ConnectionStatus::NoSuchTransmissionId == status) {
+    client_connection_status_str = "No such transmission id";
+    if (connect_button_pressed) {
+      connect_button_pressed = false;
+      joined = false;
+      connect_label = connect_button_pressed ? "Disconnect" : "Connect";
+    }
   }
 }
 
@@ -1031,15 +1038,15 @@ int main() {
         {
           {
             static char remote_id[20] = "";
-            if (strcmp(remote_id, "") == 0) {
-              strcpy(remote_id, GetMac(mac_addr).c_str());
-            }
+            // if (strcmp(remote_id, "") == 0) {
+            //   strcpy(remote_id, GetMac(mac_addr).c_str());
+            // }
             ImGui::Text("REMOTE ID:");
             ImGui::SameLine();
             ImGui::SetNextItemWidth(95);
             ImGui::InputTextWithHint("##remote_id", mac_addr, remote_id,
                                      IM_ARRAYSIZE(remote_id),
-                                     ImGuiInputTextFlags_AllowTabInput);
+                                     ImGuiInputTextFlags_CharsNoBlank);
 
             ImGui::Spacing();
 
