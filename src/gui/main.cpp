@@ -127,10 +127,17 @@ unsigned char pcm_bytes[MAX_FRAME_SIZE * CHANNELS * 2];
 
 std::string window_title = "Remote Desk Client";
 
-std::string server_connection_status = "-";
-std::string client_connection_status = "-";
-std::string server_signal_status = "-";
-std::string client_signal_status = "-";
+std::string server_connection_status_str = "-";
+std::string client_connection_status_str = "-";
+std::string server_signal_status_str = "-";
+std::string client_signal_status_str = "-";
+
+std::atomic<ConnectionStatus> server_connection_status =
+    ConnectionStatus::Closed;
+std::atomic<ConnectionStatus> client_connection_status =
+    ConnectionStatus::Closed;
+std::atomic<SignalStatus> server_signal_status = SignalStatus::SignalClosed;
+std::atomic<SignalStatus> client_signal_status = SignalStatus::SignalClosed;
 
 // Refresh Event
 #define REFRESH_EVENT (SDL_USEREVENT + 1)
@@ -317,12 +324,12 @@ void SdlCaptureAudioIn(void *userdata, Uint8 *stream, int len) {
   }
 
   if (1) {
-    if ("ClientConnected" == client_connection_status) {
+    if ("ClientConnected" == client_connection_status_str) {
       SendData(peer_client, DATA_TYPE::AUDIO, (const char *)dst_data[0],
                dst_bufsize);
     }
 
-    if ("ServerConnected" == server_connection_status) {
+    if ("ServerConnected" == server_connection_status_str) {
       SendData(peer_server, DATA_TYPE::AUDIO, (const char *)dst_data[0],
                dst_bufsize);
     }
@@ -335,7 +342,7 @@ void SdlCaptureAudioIn(void *userdata, Uint8 *stream, int len) {
 }
 
 void SdlCaptureAudioOut(void *userdata, Uint8 *stream, int len) {
-  // if ("ClientConnected" != client_connection_status) {
+  // if ("ClientConnected" != client_connection_status_str) {
   //   return;
   // }
 
@@ -483,46 +490,49 @@ void ClientReceiveDataBuffer(const char *data, size_t size, const char *user_id,
 }
 
 void ServerSignalStatus(SignalStatus status) {
+  server_signal_status = status;
   if (SignalStatus::SignalConnecting == status) {
-    server_signal_status = "ServerSignalConnecting";
+    server_signal_status_str = "ServerSignalConnecting";
   } else if (SignalStatus::SignalConnected == status) {
-    server_signal_status = "ServerSignalConnected";
+    server_signal_status_str = "ServerSignalConnected";
   } else if (SignalStatus::SignalFailed == status) {
-    server_signal_status = "ServerSignalFailed";
+    server_signal_status_str = "ServerSignalFailed";
   } else if (SignalStatus::SignalClosed == status) {
-    server_signal_status = "ServerSignalClosed";
+    server_signal_status_str = "ServerSignalClosed";
   } else if (SignalStatus::SignalReconnecting == status) {
-    server_signal_status = "ServerSignalReconnecting";
+    server_signal_status_str = "ServerSignalReconnecting";
   }
 }
 
 void ClientSignalStatus(SignalStatus status) {
+  client_signal_status = status;
   if (SignalStatus::SignalConnecting == status) {
-    client_signal_status = "ClientSignalConnecting";
+    client_signal_status_str = "ClientSignalConnecting";
   } else if (SignalStatus::SignalConnected == status) {
-    client_signal_status = "ClientSignalConnected";
+    client_signal_status_str = "ClientSignalConnected";
   } else if (SignalStatus::SignalFailed == status) {
-    client_signal_status = "ClientSignalFailed";
+    client_signal_status_str = "ClientSignalFailed";
   } else if (SignalStatus::SignalClosed == status) {
-    client_signal_status = "ClientSignalClosed";
+    client_signal_status_str = "ClientSignalClosed";
   } else if (SignalStatus::SignalReconnecting == status) {
-    client_signal_status = "ClientSignalReconnecting";
+    client_signal_status_str = "ClientSignalReconnecting";
   }
 }
 
 void ServerConnectionStatus(ConnectionStatus status) {
+  server_connection_status = status;
   if (ConnectionStatus::Connecting == status) {
-    server_connection_status = "ServerConnecting";
+    server_connection_status_str = "ServerConnecting";
   } else if (ConnectionStatus::Connected == status) {
-    server_connection_status = "ServerConnected";
+    server_connection_status_str = "ServerConnected";
   } else if (ConnectionStatus::Disconnected == status) {
-    server_connection_status = "ServerDisconnected";
+    server_connection_status_str = "ServerDisconnected";
   } else if (ConnectionStatus::Failed == status) {
-    server_connection_status = "ServerFailed";
+    server_connection_status_str = "ServerFailed";
   } else if (ConnectionStatus::Closed == status) {
-    server_connection_status = "ServerClosed";
+    server_connection_status_str = "ServerClosed";
   } else if (ConnectionStatus::IncorrectPassword == status) {
-    server_connection_status = "Incorrect password";
+    server_connection_status_str = "Incorrect password";
     if (connect_button_pressed) {
       connect_button_pressed = false;
       joined = false;
@@ -532,18 +542,19 @@ void ServerConnectionStatus(ConnectionStatus status) {
 }
 
 void ClientConnectionStatus(ConnectionStatus status) {
+  client_connection_status = status;
   if (ConnectionStatus::Connecting == status) {
-    client_connection_status = "ClientConnecting";
+    client_connection_status_str = "ClientConnecting";
   } else if (ConnectionStatus::Connected == status) {
-    client_connection_status = "ClientConnected";
+    client_connection_status_str = "ClientConnected";
   } else if (ConnectionStatus::Disconnected == status) {
-    client_connection_status = "ClientDisconnected";
+    client_connection_status_str = "ClientDisconnected";
   } else if (ConnectionStatus::Failed == status) {
-    client_connection_status = "ClientFailed";
+    client_connection_status_str = "ClientFailed";
   } else if (ConnectionStatus::Closed == status) {
-    client_connection_status = "ClientClosed";
+    client_connection_status_str = "ClientClosed";
   } else if (ConnectionStatus::IncorrectPassword == status) {
-    client_connection_status = "Incorrect password";
+    client_connection_status_str = "Incorrect password";
     if (connect_button_pressed) {
       connect_button_pressed = false;
       joined = false;
@@ -776,7 +787,7 @@ int main() {
     LOG_INFO("peer_client init finish");
 
     {
-      while ("ServerSignalConnected" != server_signal_status && !done) {
+      while (SignalStatus::SignalConnected != server_signal_status && !done) {
       }
 
       if (done) {
@@ -1043,7 +1054,7 @@ int main() {
 
             if (ImGui::Button(connect_label)) {
               int ret = -1;
-              if ("ClientSignalConnected" == client_signal_status) {
+              if ("ClientSignalConnected" == client_signal_status_str) {
                 if (strcmp(connect_label, "Connect") == 0 && !joined) {
                   std::string user_id = "C-" + std::string(GetMac(mac_addr));
                   ret = JoinConnection(peer_client, remote_id, client_password);
@@ -1142,9 +1153,10 @@ int main() {
       fps = frame_count / (elapsed_time / 1000);
       frame_count = 0;
       window_title = "Remote Desk Client FPS [" + std::to_string(fps) +
-                     "] status [" + server_signal_status + "|" +
-                     client_signal_status + "|" + server_connection_status +
-                     "|" + client_connection_status + "]";
+                     "] status [" + server_signal_status_str + "|" +
+                     client_signal_status_str + "|" +
+                     server_connection_status_str + "|" +
+                     client_connection_status_str + "]";
       // For MacOS, UI frameworks can only be called from the main thread
       SDL_SetWindowTitle(window, window_title.c_str());
       start_time = end_time;

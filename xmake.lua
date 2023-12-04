@@ -32,9 +32,9 @@ elseif is_os("linux") then
         {force = true})
 elseif is_os("macosx") then
     add_requires("ffmpeg 5.1.2", {system = false})
-    add_requires("brew::libxcb")
-    add_packages("ffmpeg", "brew::libxcb")
-    add_links("SDL2", "SDL2main", "postproc")
+    add_requires("libxcb", {system = false})
+    add_packages("ffmpeg", "libxcb")
+    add_links("SDL2", "SDL2main")
     add_ldflags("-Wl,-ld_classic")
     add_frameworks("OpenGL")
 end

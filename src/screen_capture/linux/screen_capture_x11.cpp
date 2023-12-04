@@ -21,6 +21,8 @@ int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
     _on_data = cb;
   }
 
+  av_log_set_level(AV_LOG_QUIET);
+
   pFormatCtx_ = avformat_alloc_context();
 
   avdevice_register_all();
