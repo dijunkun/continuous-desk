@@ -6,6 +6,7 @@
 #include <Winsock2.h>
 #include <iphlpapi.h>
 #elif __APPLE__
+#include <ApplicationServices/ApplicationServices.h>
 #include <ifaddrs.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
@@ -407,6 +408,10 @@ void ServerReceiveDataBuffer(const char *data, size_t size, const char *user_id,
   // std::cout << "remote_action: " << remote_action.type << " "
   //           << remote_action.m.flag << " " << remote_action.m.x << " "
   //           << remote_action.m.y << std::endl;
+
+  int mouse_pos_x = remote_action.m.x * screen_w / 1280;
+  int mouse_pos_y = remote_action.m.y * screen_h / 720;
+#if 1
 #ifdef _WIN32
   INPUT ip;
 
@@ -428,18 +433,43 @@ void ServerReceiveDataBuffer(const char *data, size_t size, const char *user_id,
     ip.mi.mouseData = 0;
     ip.mi.time = 0;
 
-#if MOUSE_CONTROL
     // Set cursor pos
     SetCursorPos(ip.mi.dx, ip.mi.dy);
     // Send the press
     if (ip.mi.dwFlags != MOUSEEVENTF_MOVE) {
       SendInput(1, &ip, sizeof(INPUT));
     }
-#endif
+
     // std::cout << "Receive data from [" << user << "], " << ip.type << " "
     //           << ip.mi.dwFlags << " " << ip.mi.dx << " " << ip.mi.dy
     //           << std::endl;
   }
+
+#elif __APPLE__
+  if (remote_action.type == ControlType::mouse) {
+    CGEventRef mouse_event;
+    CGEventType mouse_type;
+
+    if (remote_action.m.flag == MouseFlag::left_down) {
+      mouse_type = kCGEventLeftMouseDown;
+    } else if (remote_action.m.flag == MouseFlag::left_up) {
+      mouse_type = kCGEventLeftMouseUp;
+    } else if (remote_action.m.flag == MouseFlag::right_down) {
+      mouse_type = kCGEventRightMouseDown;
+    } else if (remote_action.m.flag == MouseFlag::right_up) {
+      mouse_type = kCGEventRightMouseUp;
+    } else {
+      mouse_type = kCGEventMouseMoved;
+    }
+
+    mouse_event = CGEventCreateMouseEvent(NULL, mouse_type,
+                                          CGPointMake(mouse_pos_x, mouse_pos_y),
+                                          kCGMouseButtonLeft);
+
+    CGEventPost(kCGHIDEventTap, mouse_event);
+    CFRelease(mouse_event);
+  }
+#endif
 #endif
 }
 
@@ -450,16 +480,20 @@ void ClientReceiveDataBuffer(const char *data, size_t size, const char *user_id,
   RemoteAction remote_action;
   memcpy(&remote_action, data, sizeof(remote_action));
 
-  // std::cout << "remote_action: " << remote_action.type << " "
-  //           << remote_action.m.flag << " " << remote_action.m.x << " "
-  //           << remote_action.m.y << std::endl;
+  std::cout << "remote_action: " << remote_action.type << " "
+            << remote_action.m.flag << " " << remote_action.m.x << " "
+            << remote_action.m.y << std::endl;
+
+  int mouse_pos_x = remote_action.m.x * screen_w / 1280;
+  int mouse_pos_y = remote_action.m.y * screen_h / 720;
+
 #ifdef _WIN32
   INPUT ip;
 
   if (remote_action.type == ControlType::mouse) {
     ip.type = INPUT_MOUSE;
-    ip.mi.dx = remote_action.m.x * screen_w / 1280;
-    ip.mi.dy = remote_action.m.y * screen_h / 720;
+    ip.mi.dx = mouse_pos_x;
+    ip.mi.dy = mouse_pos_y;
     if (remote_action.m.flag == MouseFlag::left_down) {
       ip.mi.dwFlags = MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_ABSOLUTE;
     } else if (remote_action.m.flag == MouseFlag::left_up) {
@@ -486,6 +520,15 @@ void ClientReceiveDataBuffer(const char *data, size_t size, const char *user_id,
     //           << ip.mi.dwFlags << " " << ip.mi.dx << " " << ip.mi.dy
     //           << std::endl;
   }
+
+#elif __APPLE__
+  CGEventRef mouse_event;
+  mouse_event = CGEventCreateMouseEvent(NULL, kCGEventMouseMoved,
+                                        CGPointMake(mouse_pos_x, mouse_pos_y),
+                                        kCGMouseButtonLeft);
+  CGEventPost(kCGHIDEventTap, mouse_event);
+  CFRelease(mouse_event);
+
 #endif
 }
 
