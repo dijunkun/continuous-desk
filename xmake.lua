@@ -28,7 +28,7 @@ elseif is_os("linux") then
     add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
         "-lswscale", "-lavutil", "-lswresample",
         "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
-        "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-ldl", "-lpthread", 
+        "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-ldl", "-lpthread",
         {force = true})
 elseif is_os("macosx") then
     add_requires("ffmpeg 5.1.2", {system = false})

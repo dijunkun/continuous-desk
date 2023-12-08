@@ -13,6 +13,8 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #elif __linux__
+#include <fcntl.h>
+#include <linux/uinput.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -75,6 +77,9 @@ SDL_Rect sdlRect;
 SDL_Window *window;
 static SDL_AudioDeviceID input_dev;
 static SDL_AudioDeviceID output_dev;
+static int uinput_fd;
+static int fd_mouse = -1;
+static int fd_kbd = -1;
 
 uint32_t start_time, end_time, elapsed_time;
 uint32_t frame_count = 0;
@@ -398,6 +403,55 @@ void ClientReceiveAudioBuffer(const char *data, size_t size,
   SDL_QueueAudio(output_dev, data, size);
 }
 
+void simulate_key(int fd, int kval) {
+  struct input_event event;
+  gettimeofday(&event.time, 0);
+  // 按下kval键
+  event.type = EV_KEY;
+  event.value = 1;
+  event.code = kval;
+  write(fd, &event, sizeof(event));
+  // 同步，也就是把它报告给系统
+  event.type = EV_SYN;
+  event.value = 0;
+  event.code = SYN_REPORT;
+  write(fd, &event, sizeof(event));
+
+  memset(&event, 0, sizeof(event));
+  gettimeofday(&event.time, 0);
+  // 松开kval键
+  event.type = EV_KEY;
+  event.value = 0;
+  event.code = kval;
+  write(fd, &event, sizeof(event));
+  // 同步，也就是把它报告给系统
+  event.type = EV_SYN;
+  event.value = 0;
+  event.code = SYN_REPORT;
+  write(fd, &event, sizeof(event));
+}
+
+// 鼠标移动模拟
+void simulate_mouse(int fd, int rel_x, int rel_y) {
+  struct input_event event;
+  gettimeofday(&event.time, 0);
+  // x轴坐标的相对位移
+  event.type = EV_REL;
+  event.value = rel_x;
+  event.code = REL_X;
+  write(fd, &event, sizeof(event));
+  // y轴坐标的相对位移
+  event.type = EV_REL;
+  event.value = rel_y;
+  event.code = REL_Y;
+  write(fd, &event, sizeof(event));
+  // 同步
+  event.type = EV_SYN;
+  event.value = 0;
+  event.code = SYN_REPORT;
+  write(fd, &event, sizeof(event));
+}
+
 void ServerReceiveDataBuffer(const char *data, size_t size, const char *user_id,
                              size_t user_id_size) {
   std::string user(user_id, user_id_size);
@@ -405,9 +459,9 @@ void ServerReceiveDataBuffer(const char *data, size_t size, const char *user_id,
   RemoteAction remote_action;
   memcpy(&remote_action, data, sizeof(remote_action));
 
-  // std::cout << "remote_action: " << remote_action.type << " "
-  //           << remote_action.m.flag << " " << remote_action.m.x << " "
-  //           << remote_action.m.y << std::endl;
+  std::cout << "remote_action: " << remote_action.type << " "
+            << remote_action.m.flag << " " << remote_action.m.x << " "
+            << remote_action.m.y << std::endl;
 
   int mouse_pos_x = remote_action.m.x * screen_w / 1280;
   int mouse_pos_y = remote_action.m.y * screen_h / 720;
@@ -468,6 +522,24 @@ void ServerReceiveDataBuffer(const char *data, size_t size, const char *user_id,
 
     CGEventPost(kCGHIDEventTap, mouse_event);
     CFRelease(mouse_event);
+  }
+#elif __linux__
+  if (remote_action.type == ControlType::mouse) {
+    struct input_event event;
+    memset(&event, 0, sizeof(event));
+    gettimeofday(&event.time, NULL);
+
+    if (remote_action.m.flag == MouseFlag::left_down) {
+      simulate_key(fd_mouse, BTN_LEFT);
+    } else if (remote_action.m.flag == MouseFlag::left_up) {
+      simulate_key(fd_mouse, BTN_LEFT);
+    } else if (remote_action.m.flag == MouseFlag::right_down) {
+      simulate_key(fd_mouse, BTN_RIGHT);
+    } else if (remote_action.m.flag == MouseFlag::right_up) {
+      simulate_key(fd_mouse, BTN_RIGHT);
+    } else {
+      simulate_mouse(fd_mouse, mouse_pos_x, mouse_pos_y);
+    }
   }
 #endif
 #endif
@@ -881,6 +953,57 @@ int main() {
       screen_capture->Start();
 
 #elif __linux__
+      {
+        uinput_fd = open("/dev/uinput", O_WRONLY | O_NDELAY);
+        if (uinput_fd < 0) {
+          perror("无法打开 /dev/uinput");
+          return;
+        }
+
+        fd_kbd = open("/dev/input/event3", O_RDWR);
+        if (fd_kbd <= 0) {
+          printf("Can not open keyboard input file\n");
+          return;
+        }
+
+        fd_mouse = open("/dev/input/event2", O_RDWR);
+        if (fd_mouse <= 0) {
+          printf("Can not open mouse input file\n");
+          return;
+        }
+
+        // 设置uinput设备的属性
+        struct uinput_user_dev uidev;
+        ioctl(uinput_fd, UI_SET_EVBIT, EV_ABS);
+        ioctl(uinput_fd, UI_SET_ABSBIT, ABS_X);
+        ioctl(uinput_fd, UI_SET_ABSBIT, ABS_Y);
+        ioctl(uinput_fd, UI_SET_EVBIT, EV_KEY);
+        ioctl(uinput_fd, UI_SET_KEYBIT, BTN_LEFT);
+        ioctl(uinput_fd, UI_SET_KEYBIT, BTN_RIGHT);
+        ioctl(uinput_fd, UI_SET_KEYBIT, BTN_MIDDLE);
+        ioctl(uinput_fd, UI_SET_EVBIT, EV_REL);
+        ioctl(uinput_fd, UI_SET_RELBIT, REL_X);
+        ioctl(uinput_fd, UI_SET_RELBIT, REL_Y);
+
+        memset(&uidev, 0, sizeof(uidev));
+        strncpy(uidev.name, "Virtual Mouse", UINPUT_MAX_NAME_SIZE);
+        uidev.id.bustype = BUS_USB;
+        uidev.id.vendor = 0x1234;   // 自定义厂商ID
+        uidev.id.product = 0x5678;  // 自定义产品ID
+        uidev.absmin[ABS_X] = 0;
+        uidev.absmax[ABS_X] = 1280;
+        uidev.absfuzz[ABS_X] = 0;
+        uidev.absflat[ABS_X] = 0;
+        uidev.absmin[ABS_Y] = 0;
+        uidev.absmax[ABS_Y] = 720;
+        uidev.absfuzz[ABS_Y] = 0;
+        uidev.absflat[ABS_Y] = 0;
+
+        ioctl(uinput_fd, UI_DEV_SETUP, &uidev);
+
+        ioctl(uinput_fd, UI_DEV_CREATE);
+      }
+
       screen_capture = new ScreenCaptureX11();
 
       RECORD_DESKTOP_RECT rect;
@@ -1226,6 +1349,11 @@ int main() {
   rtc_thread.join();
   SDL_CloseAudioDevice(output_dev);
   SDL_CloseAudioDevice(input_dev);
+
+#ifdef __linux__
+  ioctl(uinput_fd, UI_DEV_DESTROY);
+  close(uinput_fd);
+#endif
 
   ImGui_ImplSDLRenderer2_Shutdown();
   ImGui_ImplSDL2_Shutdown();
