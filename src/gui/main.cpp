@@ -77,14 +77,6 @@ SDL_Rect sdlRect;
 SDL_Window *window;
 static SDL_AudioDeviceID input_dev;
 static SDL_AudioDeviceID output_dev;
-static int uinput_fd;
-static struct uinput_user_dev uinput_dev;
-#define KEY_CUSTOM_UP 0x20
-#define KEY_CUSTOM_DOWN 0x30
-static int fd_mouse = -1;
-static int fd_kbd = -1;
-static std::atomic<int> mouse_pos_x_last = -65535;
-static std::atomic<int> mouse_pos_y_last = -65535;
 
 uint32_t start_time, end_time, elapsed_time;
 uint32_t frame_count = 0;
@@ -182,6 +174,14 @@ char *nv12_buffer = nullptr;
 
 #ifdef __linux__
 std::chrono::_V2::system_clock::time_point last_frame_time_;
+static int uinput_fd;
+static struct uinput_user_dev uinput_dev;
+#define KEY_CUSTOM_UP 0x20
+#define KEY_CUSTOM_DOWN 0x30
+static int fd_mouse = -1;
+static int fd_kbd = -1;
+static std::atomic<int> mouse_pos_x_last = -65535;
+static std::atomic<int> mouse_pos_y_last = -65535;
 #else
 std::chrono::steady_clock::time_point last_frame_time_;
 #endif
@@ -384,6 +384,7 @@ void ClientReceiveAudioBuffer(const char *data, size_t size,
   SDL_QueueAudio(output_dev, data, size);
 }
 
+#ifdef __linux__
 void simulate_key_down(int fd, int kval) {
   struct input_event event;
   memset(&event, 0, sizeof(event));
@@ -504,6 +505,7 @@ void simulate_mouse_abs(int fd, int x, int y) {
   ev.code = SYN_REPORT;
   write(fd, &ev, sizeof(ev));
 }
+#endif
 
 void ServerReceiveDataBuffer(const char *data, size_t size, const char *user_id,
                              size_t user_id_size) {
