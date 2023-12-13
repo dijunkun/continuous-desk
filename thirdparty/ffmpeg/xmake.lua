@@ -43,6 +43,7 @@ package("ffmpeg")
         add_configs("hardcoded-tables", {description = "Enable hardcoded tables.", default = true, type = "boolean"})
         add_configs("asm",              {description = "Enable asm", default = false, type = "boolean"})
         add_configs("libopenh264",      {description = "Enable libopenh264", default = false, type = "boolean"})
+        add_configs("libxcb",           {description = "Enable libxcb", default = true, type = "boolean"})
     end
 
     add_links("avfilter", "avdevice", "avformat", "avcodec", "swscale", "swresample", "avutil", "postproc")

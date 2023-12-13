@@ -5,6 +5,9 @@ set_license("LGPL-3.0")
 add_rules("mode.release", "mode.debug")
 set_languages("c++17")
 
+-- set_policy("build.warning", true)
+-- set_warnings("all", "extra")
+
 add_defines("UNICODE")
 if is_mode("debug") then
     add_defines("REMOTE_DESK_DEBUG")
@@ -24,7 +27,8 @@ elseif is_os("linux") then
     add_requires("ffmpeg 5.1.2", {system = false})
     add_packages("ffmpeg")
     add_syslinks("pthread", "dl")
-    add_links("SDL2")
+    add_linkdirs("thirdparty/projectx/thirdparty/nvcodec/Lib/x64")
+    add_links("SDL2", "cuda", "nvidia-encode", "nvcuvid")
     add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
         "-lswscale", "-lavutil", "-lswresample",
         "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
@@ -130,3 +134,8 @@ target("remote_desk")
 --     "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
 --     "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-lpthread", "-lSDL2", "-lopenh264",
 --     "-ldl", {force = true})
+
+target("mouse_control")
+    set_kind("binary")
+    add_files("test/linux_mouse_control/mouse_control.cpp")
+    add_includedirs("test/linux_mouse_control")

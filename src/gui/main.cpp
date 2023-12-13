@@ -78,8 +78,13 @@ SDL_Window *window;
 static SDL_AudioDeviceID input_dev;
 static SDL_AudioDeviceID output_dev;
 static int uinput_fd;
+static struct uinput_user_dev uinput_dev;
+#define KEY_CUSTOM_UP 0x20
+#define KEY_CUSTOM_DOWN 0x30
 static int fd_mouse = -1;
 static int fd_kbd = -1;
+static std::atomic<int> mouse_pos_x_last = -65535;
+static std::atomic<int> mouse_pos_y_last = -65535;
 
 uint32_t start_time, end_time, elapsed_time;
 uint32_t frame_count = 0;
@@ -91,9 +96,6 @@ static int in_pos = 0;
 static int out_pos = 0;
 static std::atomic<bool> audio_buffer_fresh = false;
 static uint32_t last_ts = 0;
-
-char *out = "audio_old.pcm";
-FILE *outfile = fopen(out, "wb+");
 
 int64_t src_ch_layout = AV_CH_LAYOUT_MONO;
 int src_rate = 48000;
@@ -228,10 +230,6 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
     }
   } else if (SDL_MOUSEBUTTONDOWN == ev.type) {
     if (SDL_BUTTON_LEFT == ev.button.button) {
-      int px = ev.button.x;
-      int py = ev.button.y;
-      // printf("SDL_MOUSEBUTTONDOWN x, y %d %d  \n", px, py);
-
       remote_action.type = ControlType::mouse;
       remote_action.m.flag = MouseFlag::left_down;
       remote_action.m.x = ev.button.x * ratio;
@@ -241,10 +239,6 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
                sizeof(remote_action));
 
     } else if (SDL_BUTTON_RIGHT == ev.button.button) {
-      int px = ev.button.x;
-      int py = ev.button.y;
-      // printf("SDL_BUTTON_RIGHT x, y %d %d  \n", px, py);
-
       remote_action.type = ControlType::mouse;
       remote_action.m.flag = MouseFlag::right_down;
       remote_action.m.x = ev.button.x * ratio;
@@ -255,10 +249,6 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
     }
   } else if (SDL_MOUSEBUTTONUP == ev.type) {
     if (SDL_BUTTON_LEFT == ev.button.button) {
-      int px = ev.button.x;
-      int py = ev.button.y;
-      // printf("SDL_MOUSEBUTTONUP x, y %d %d  \n", px, py);
-
       remote_action.type = ControlType::mouse;
       remote_action.m.flag = MouseFlag::left_up;
       remote_action.m.x = ev.button.x * ratio;
@@ -268,10 +258,6 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
                sizeof(remote_action));
 
     } else if (SDL_BUTTON_RIGHT == ev.button.button) {
-      int px = ev.button.x;
-      int py = ev.button.y;
-      // printf("SDL_MOUSEBUTTONUP x, y %d %d  \n", px, py);
-
       remote_action.type = ControlType::mouse;
       remote_action.m.flag = MouseFlag::right_up;
       remote_action.m.x = ev.button.x * ratio;
@@ -281,11 +267,6 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
                sizeof(remote_action));
     }
   } else if (SDL_MOUSEMOTION == ev.type) {
-    int px = ev.motion.x;
-    int py = ev.motion.y;
-
-    // printf("SDL_MOUSEMOTION x, y %d %d  \n", px, py);
-
     remote_action.type = ControlType::mouse;
     remote_action.m.flag = MouseFlag::move;
     remote_action.m.x = ev.button.x * ratio;
@@ -403,8 +384,9 @@ void ClientReceiveAudioBuffer(const char *data, size_t size,
   SDL_QueueAudio(output_dev, data, size);
 }
 
-void simulate_key(int fd, int kval) {
+void simulate_key_down(int fd, int kval) {
   struct input_event event;
+  memset(&event, 0, sizeof(event));
   gettimeofday(&event.time, 0);
   // 按下kval键
   event.type = EV_KEY;
@@ -416,7 +398,10 @@ void simulate_key(int fd, int kval) {
   event.value = 0;
   event.code = SYN_REPORT;
   write(fd, &event, sizeof(event));
+}
 
+void simulate_key_up(int fd, int kval) {
+  struct input_event event;
   memset(&event, 0, sizeof(event));
   gettimeofday(&event.time, 0);
   // 松开kval键
@@ -431,25 +416,93 @@ void simulate_key(int fd, int kval) {
   write(fd, &event, sizeof(event));
 }
 
+void mouseSetPosition(int fd, int x, int y) {
+  struct input_event ev[2], ev_sync;
+  memset(ev, 0, sizeof(ev));
+  memset(&ev_sync, 0, sizeof(ev_sync));
+
+  ev[0].type = EV_ABS;
+  ev[0].code = ABS_X;
+  ev[0].value = x;
+  ev[1].type = EV_ABS;
+  ev[1].code = ABS_Y;
+  ev[1].value = y;
+
+  int res_w = write(fd, ev, sizeof(ev));
+
+  std::cout << "res w : " << res_w << "\n";
+
+  ev_sync.type = EV_SYN;
+  ev_sync.value = 0;
+  ev_sync.code = 0;
+  int res_ev_sync = write(fd, &ev_sync, sizeof(ev_sync));
+
+  std::cout << "res syn : " << res_ev_sync << "\n";
+}
+
 // 鼠标移动模拟
-void simulate_mouse(int fd, int rel_x, int rel_y) {
-  struct input_event event;
-  gettimeofday(&event.time, 0);
-  // x轴坐标的相对位移
-  event.type = EV_REL;
-  event.value = rel_x;
-  event.code = REL_X;
-  write(fd, &event, sizeof(event));
-  // y轴坐标的相对位移
-  event.type = EV_REL;
-  event.value = rel_y;
-  event.code = REL_Y;
-  write(fd, &event, sizeof(event));
+void simulate_mouse(int fd, int x, int y) {
+  struct input_event ev;
+  memset(&ev, 0, sizeof(struct input_event));
+  gettimeofday(&ev.time, NULL);
+  ev.type = EV_REL;
+  ev.code = REL_X;
+  ev.value = x;
+  if (write(fd, &ev, sizeof(struct input_event)) < 0)
+    LOG_ERROR("error: write1");
+  memset(&ev, 0, sizeof(struct input_event));
+  ev.type = EV_SYN;
+  if (write(fd, &ev, sizeof(struct input_event)) < 0)
+    LOG_ERROR("error: write4");
+
+  memset(&ev, 0, sizeof(struct input_event));
+  ev.type = EV_REL;
+  ev.code = REL_Y;
+  ev.value = y;
+  if (write(fd, &ev, sizeof(struct input_event)) < 0)
+    LOG_ERROR("error: write2");
+  memset(&ev, 0, sizeof(struct input_event));
+  ev.type = EV_SYN;
+  if (write(fd, &ev, sizeof(struct input_event)) < 0)
+    LOG_ERROR("error: write3");
+
   // 同步
-  event.type = EV_SYN;
-  event.value = 0;
-  event.code = SYN_REPORT;
-  write(fd, &event, sizeof(event));
+  // ev.type = EV_SYN;
+  // ev.value = 0;
+  // ev.code = SYN_REPORT;
+  // write(fd, &ev, sizeof(ev));
+}
+
+void simulate_mouse_abs(int fd, int x, int y) {
+  struct input_event ev;
+  memset(&ev, 0, sizeof(struct input_event));
+  gettimeofday(&ev.time, NULL);
+  ev.type = EV_ABS;
+  ev.code = ABS_X;
+  ev.value = x;
+  if (write(fd, &ev, sizeof(struct input_event)) < 0)
+    LOG_ERROR("error: write1");
+  memset(&ev, 0, sizeof(struct input_event));
+  ev.type = EV_SYN;
+  if (write(fd, &ev, sizeof(struct input_event)) < 0)
+    LOG_ERROR("error: write4");
+
+  memset(&ev, 0, sizeof(struct input_event));
+  ev.type = EV_ABS;
+  ev.code = ABS_Y;
+  ev.value = y;
+  if (write(fd, &ev, sizeof(struct input_event)) < 0)
+    LOG_ERROR("error: write2");
+  memset(&ev, 0, sizeof(struct input_event));
+  ev.type = EV_SYN;
+  if (write(fd, &ev, sizeof(struct input_event)) < 0)
+    LOG_ERROR("error: write3");
+
+  // 同步
+  ev.type = EV_SYN;
+  ev.value = 0;
+  ev.code = SYN_REPORT;
+  write(fd, &ev, sizeof(ev));
 }
 
 void ServerReceiveDataBuffer(const char *data, size_t size, const char *user_id,
@@ -465,6 +518,9 @@ void ServerReceiveDataBuffer(const char *data, size_t size, const char *user_id,
 
   int mouse_pos_x = remote_action.m.x * screen_w / 1280;
   int mouse_pos_y = remote_action.m.y * screen_h / 720;
+
+  LOG_ERROR("[{} {}] [{} {}]", screen_w, screen_h, mouse_pos_x, mouse_pos_y);
+
 #if 1
 #ifdef _WIN32
   INPUT ip;
@@ -530,16 +586,23 @@ void ServerReceiveDataBuffer(const char *data, size_t size, const char *user_id,
     gettimeofday(&event.time, NULL);
 
     if (remote_action.m.flag == MouseFlag::left_down) {
-      simulate_key(fd_mouse, BTN_LEFT);
+      simulate_key_down(uinput_fd, BTN_LEFT);
     } else if (remote_action.m.flag == MouseFlag::left_up) {
-      simulate_key(fd_mouse, BTN_LEFT);
+      simulate_key_up(uinput_fd, BTN_LEFT);
     } else if (remote_action.m.flag == MouseFlag::right_down) {
-      simulate_key(fd_mouse, BTN_RIGHT);
+      simulate_key_down(uinput_fd, BTN_RIGHT);
     } else if (remote_action.m.flag == MouseFlag::right_up) {
-      simulate_key(fd_mouse, BTN_RIGHT);
+      simulate_key_up(uinput_fd, BTN_RIGHT);
     } else {
-      simulate_mouse(fd_mouse, mouse_pos_x, mouse_pos_y);
+      mouseSetPosition(uinput_fd, mouse_pos_x, mouse_pos_y);
+      // simulate_mouse(uinput_fd, rel_x, rel_y);
+      // simulate_mouse_abs(uinput_fd, 65535, 65535);
+      mouse_pos_x_last = mouse_pos_x;
+      mouse_pos_y_last = mouse_pos_y;
     }
+
+    // report_key(EV_KEY, KEY_A, 1);  // Report BUTTON A CLICK - PRESS event
+    // report_key(EV_KEY, KEY_A, 0);
   }
 #endif
 #endif
@@ -954,53 +1017,32 @@ int main() {
 
 #elif __linux__
       {
-        uinput_fd = open("/dev/uinput", O_WRONLY | O_NDELAY);
+        uinput_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
         if (uinput_fd < 0) {
-          perror("无法打开 /dev/uinput");
-          return;
+          LOG_ERROR("Cannot open device: /dev/uinput");
         }
 
-        fd_kbd = open("/dev/input/event3", O_RDWR);
-        if (fd_kbd <= 0) {
-          printf("Can not open keyboard input file\n");
-          return;
-        }
-
-        fd_mouse = open("/dev/input/event2", O_RDWR);
-        if (fd_mouse <= 0) {
-          printf("Can not open mouse input file\n");
-          return;
-        }
-
-        // 设置uinput设备的属性
-        struct uinput_user_dev uidev;
+        ioctl(uinput_fd, UI_SET_EVBIT, EV_KEY);
+        ioctl(uinput_fd, UI_SET_KEYBIT, BTN_RIGHT);
+        ioctl(uinput_fd, UI_SET_KEYBIT, BTN_LEFT);
         ioctl(uinput_fd, UI_SET_EVBIT, EV_ABS);
         ioctl(uinput_fd, UI_SET_ABSBIT, ABS_X);
         ioctl(uinput_fd, UI_SET_ABSBIT, ABS_Y);
-        ioctl(uinput_fd, UI_SET_EVBIT, EV_KEY);
-        ioctl(uinput_fd, UI_SET_KEYBIT, BTN_LEFT);
-        ioctl(uinput_fd, UI_SET_KEYBIT, BTN_RIGHT);
-        ioctl(uinput_fd, UI_SET_KEYBIT, BTN_MIDDLE);
         ioctl(uinput_fd, UI_SET_EVBIT, EV_REL);
-        ioctl(uinput_fd, UI_SET_RELBIT, REL_X);
-        ioctl(uinput_fd, UI_SET_RELBIT, REL_Y);
 
+        struct uinput_user_dev uidev;
         memset(&uidev, 0, sizeof(uidev));
-        strncpy(uidev.name, "Virtual Mouse", UINPUT_MAX_NAME_SIZE);
+        snprintf(uidev.name, UINPUT_MAX_NAME_SIZE, "VirtualMouse");
         uidev.id.bustype = BUS_USB;
-        uidev.id.vendor = 0x1234;   // 自定义厂商ID
-        uidev.id.product = 0x5678;  // 自定义产品ID
+        uidev.id.version = 1;
+        uidev.id.vendor = 0x1;
+        uidev.id.product = 0x1;
         uidev.absmin[ABS_X] = 0;
-        uidev.absmax[ABS_X] = 1280;
-        uidev.absfuzz[ABS_X] = 0;
-        uidev.absflat[ABS_X] = 0;
+        uidev.absmax[ABS_X] = screen_w;
         uidev.absmin[ABS_Y] = 0;
-        uidev.absmax[ABS_Y] = 720;
-        uidev.absfuzz[ABS_Y] = 0;
-        uidev.absflat[ABS_Y] = 0;
+        uidev.absmax[ABS_Y] = screen_h;
 
-        ioctl(uinput_fd, UI_DEV_SETUP, &uidev);
-
+        write(uinput_fd, &uidev, sizeof(uidev));
         ioctl(uinput_fd, UI_DEV_CREATE);
       }
 

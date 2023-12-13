@@ -66,6 +66,7 @@ class ScreenCaptureX11 {
   int i_ = 0;
   int videoindex_ = 0;
   int got_picture_ = 0;
+  int fps_ = 0;
   // ffmpeg
   AVFormatContext *pFormatCtx_ = nullptr;
   AVCodecContext *pCodecCtx_ = nullptr;

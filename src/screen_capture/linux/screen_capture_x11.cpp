@@ -21,6 +21,8 @@ int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
     _on_data = cb;
   }
 
+  fps_ = fps;
+
   av_log_set_level(AV_LOG_QUIET);
 
   pFormatCtx_ = avformat_alloc_context();
@@ -33,9 +35,10 @@ int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
   // av_dict_set(&options_, "follow_mouse", "centered", 0);
   // Video frame size. The default is to capture the full screen
   // av_dict_set(&options_, "video_size", "1280x720", 0);
-  ifmt_ = (AVInputFormat *)av_find_input_format("x11grab");
+  std::string capture_method = "x11grab";
+  ifmt_ = (AVInputFormat *)av_find_input_format(capture_method.c_str());
   if (!ifmt_) {
-    printf("Couldn't find_input_format\n");
+    LOG_ERROR("Couldn't find_input_format [{}]", capture_method.c_str());
   }
 
   // Grab at position 10,20
