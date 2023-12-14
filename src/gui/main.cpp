@@ -6,7 +6,6 @@
 #include <Winsock2.h>
 #include <iphlpapi.h>
 #elif __APPLE__
-#include <ApplicationServices/ApplicationServices.h>
 #include <ifaddrs.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
@@ -14,7 +13,6 @@
 #include <sys/types.h>
 #elif __linux__
 #include <fcntl.h>
-#include <linux/uinput.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -398,104 +396,11 @@ void ServerReceiveDataBuffer(const char *data, size_t size, const char *user_id,
             << remote_action.m.flag << " " << remote_action.m.x << " "
             << remote_action.m.y << std::endl;
 
-  int mouse_pos_x = remote_action.m.x * screen_w / 1280;
-  int mouse_pos_y = remote_action.m.y * screen_h / 720;
-
-  LOG_ERROR("[{} {}] [{} {}]", screen_w, screen_h, mouse_pos_x, mouse_pos_y);
-
-#if 1
-#ifdef _WIN32
   mouse_controller->SendCommand(remote_action);
-
-#elif __APPLE__
-  // if (remote_action.type == ControlType::mouse) {
-  //   CGEventRef mouse_event;
-  //   CGEventType mouse_type;
-
-  //   if (remote_action.m.flag == MouseFlag::left_down) {
-  //     mouse_type = kCGEventLeftMouseDown;
-  //   } else if (remote_action.m.flag == MouseFlag::left_up) {
-  //     mouse_type = kCGEventLeftMouseUp;
-  //   } else if (remote_action.m.flag == MouseFlag::right_down) {
-  //     mouse_type = kCGEventRightMouseDown;
-  //   } else if (remote_action.m.flag == MouseFlag::right_up) {
-  //     mouse_type = kCGEventRightMouseUp;
-  //   } else {
-  //     mouse_type = kCGEventMouseMoved;
-  //   }
-
-  //   mouse_event = CGEventCreateMouseEvent(NULL, mouse_type,
-  //                                         CGPointMake(mouse_pos_x,
-  //                                         mouse_pos_y), kCGMouseButtonLeft);
-
-  //   CGEventPost(kCGHIDEventTap, mouse_event);
-  //   CFRelease(mouse_event);
-  // }
-#elif __linux__
-
-  mouse_controller->SendCommand(remote_action);
-#endif
-#endif
 }
 
 void ClientReceiveDataBuffer(const char *data, size_t size, const char *user_id,
-                             size_t user_id_size) {
-  std::string user(user_id, user_id_size);
-
-  RemoteAction remote_action;
-  memcpy(&remote_action, data, sizeof(remote_action));
-
-  std::cout << "remote_action: " << remote_action.type << " "
-            << remote_action.m.flag << " " << remote_action.m.x << " "
-            << remote_action.m.y << std::endl;
-
-  int mouse_pos_x = remote_action.m.x * screen_w / 1280;
-  int mouse_pos_y = remote_action.m.y * screen_h / 720;
-
-#ifdef _WIN32
-  INPUT ip;
-
-  if (remote_action.type == ControlType::mouse) {
-    ip.type = INPUT_MOUSE;
-    ip.mi.dx = mouse_pos_x;
-    ip.mi.dy = mouse_pos_y;
-    if (remote_action.m.flag == MouseFlag::left_down) {
-      ip.mi.dwFlags = MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_ABSOLUTE;
-    } else if (remote_action.m.flag == MouseFlag::left_up) {
-      ip.mi.dwFlags = MOUSEEVENTF_LEFTUP | MOUSEEVENTF_ABSOLUTE;
-    } else if (remote_action.m.flag == MouseFlag::right_down) {
-      ip.mi.dwFlags = MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_ABSOLUTE;
-    } else if (remote_action.m.flag == MouseFlag::right_up) {
-      ip.mi.dwFlags = MOUSEEVENTF_RIGHTUP | MOUSEEVENTF_ABSOLUTE;
-    } else {
-      ip.mi.dwFlags = MOUSEEVENTF_MOVE;
-    }
-    ip.mi.mouseData = 0;
-    ip.mi.time = 0;
-
-#if MOUSE_CONTROL
-    // Set cursor pos
-    SetCursorPos(ip.mi.dx, ip.mi.dy);
-    // Send the press
-    if (ip.mi.dwFlags != MOUSEEVENTF_MOVE) {
-      SendInput(1, &ip, sizeof(INPUT));
-    }
-#endif
-    // std::cout << "Receive data from [" << user << "], " << ip.type << " "
-    //           << ip.mi.dwFlags << " " << ip.mi.dx << " " << ip.mi.dy
-    //           << std::endl;
-  }
-
-#elif __APPLE__
-  CGEventRef mouse_event;
-  mouse_event = CGEventCreateMouseEvent(NULL, kCGEventMouseMoved,
-                                        CGPointMake(mouse_pos_x, mouse_pos_y),
-                                        kCGMouseButtonLeft);
-  CGEventPost(kCGHIDEventTap, mouse_event);
-  CFRelease(mouse_event);
-
-#endif
-}
+                             size_t user_id_size) {}
 
 void ServerSignalStatus(SignalStatus status) {
   server_signal_status = status;
@@ -815,80 +720,32 @@ int main() {
                                                                   : true;
 
       nv12_buffer = new char[NV12_BUFFER_SIZE];
-#ifdef _WIN32
-      device_controller_factory = new DeviceControllerFactory();
-      mouse_controller = (MouseController *)device_controller_factory->Create(
-          DeviceControllerFactory::Device::Mouse);
-      mouse_controller->Init(screen_w, screen_h);
-
-      screen_capture = new ScreenCaptureWgc();
 
       RECORD_DESKTOP_RECT rect;
       rect.left = 0;
       rect.top = 0;
+
+#ifdef _WIN32
       rect.right = GetSystemMetrics(SM_CXSCREEN);
       rect.bottom = GetSystemMetrics(SM_CYSCREEN);
-
-      last_frame_time_ = std::chrono::high_resolution_clock::now();
-      screen_capture->Init(
-          rect, 60,
-          [](unsigned char *data, int size, int width, int height) -> void {
-            auto now_time = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> duration =
-                now_time - last_frame_time_;
-            auto tc = duration.count() * 1000;
-
-            if (tc >= 0) {
-              BGRAToNV12FFmpeg(data, width, height,
-                               (unsigned char *)nv12_buffer);
-              SendData(peer_server, DATA_TYPE::VIDEO, (const char *)nv12_buffer,
-                       NV12_BUFFER_SIZE);
-              // std::cout << "Send" << std::endl;
-              last_frame_time_ = now_time;
-            }
-          });
-
-      screen_capture->Start();
-
+      screen_capture = new ScreenCaptureWgc();
 #elif __linux__
+      rect.right = 0;
+      rect.bottom = 0;
+      screen_capture = new ScreenCaptureX11();
+#elif __APPLE__
+      rect.right = 0;
+      rect.bottom = 0;
+      screen_capture = new ScreenCaptureAvf();
+#endif
+
       device_controller_factory = new DeviceControllerFactory();
       mouse_controller = (MouseController *)device_controller_factory->Create(
           DeviceControllerFactory::Device::Mouse);
       mouse_controller->Init(screen_w, screen_h);
 
-      screen_capture = new ScreenCaptureX11();
-
-      RECORD_DESKTOP_RECT rect;
-      rect.left = 0;
-      rect.top = 0;
-      rect.right = 0;
-      rect.bottom = 0;
-
-      last_frame_time_ = std::chrono::high_resolution_clock::now();
-      screen_capture->Init(
-          rect, 60,
-          [](unsigned char *data, int size, int width, int height) -> void {
-            auto now_time = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> duration =
-                now_time - last_frame_time_;
-            auto tc = duration.count() * 1000;
-
-            if (tc >= 0) {
-              SendData(peer_server, DATA_TYPE::VIDEO, (const char *)data,
-                       NV12_BUFFER_SIZE);
-              last_frame_time_ = now_time;
-            }
-          });
-      screen_capture->Start();
-#elif __APPLE__
       screen_capture = new ScreenCaptureAvf();
 
-      RECORD_DESKTOP_RECT rect;
-      rect.left = 0;
-      rect.top = 0;
-      rect.right = 0;
-      rect.bottom = 0;
-
       last_frame_time_ = std::chrono::high_resolution_clock::now();
       screen_capture->Init(
           rect, 60,
@@ -905,7 +762,6 @@ int main() {
             }
           });
       screen_capture->Start();
-#endif
     }
   });
 
