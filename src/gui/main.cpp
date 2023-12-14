@@ -387,129 +387,6 @@ void ClientReceiveAudioBuffer(const char *data, size_t size,
   SDL_QueueAudio(output_dev, data, size);
 }
 
-#ifdef __linux__
-void simulate_key_down(int fd, int kval) {
-  struct input_event event;
-  memset(&event, 0, sizeof(event));
-  gettimeofday(&event.time, 0);
-  // 按下kval键
-  event.type = EV_KEY;
-  event.value = 1;
-  event.code = kval;
-  write(fd, &event, sizeof(event));
-  // 同步，也就是把它报告给系统
-  event.type = EV_SYN;
-  event.value = 0;
-  event.code = SYN_REPORT;
-  write(fd, &event, sizeof(event));
-}
-
-void simulate_key_up(int fd, int kval) {
-  struct input_event event;
-  memset(&event, 0, sizeof(event));
-  gettimeofday(&event.time, 0);
-  // 松开kval键
-  event.type = EV_KEY;
-  event.value = 0;
-  event.code = kval;
-  write(fd, &event, sizeof(event));
-  // 同步，也就是把它报告给系统
-  event.type = EV_SYN;
-  event.value = 0;
-  event.code = SYN_REPORT;
-  write(fd, &event, sizeof(event));
-}
-
-void mouseSetPosition(int fd, int x, int y) {
-  struct input_event ev[2], ev_sync;
-  memset(ev, 0, sizeof(ev));
-  memset(&ev_sync, 0, sizeof(ev_sync));
-
-  ev[0].type = EV_ABS;
-  ev[0].code = ABS_X;
-  ev[0].value = x;
-  ev[1].type = EV_ABS;
-  ev[1].code = ABS_Y;
-  ev[1].value = y;
-
-  int res_w = write(fd, ev, sizeof(ev));
-
-  std::cout << "res w : " << res_w << "\n";
-
-  ev_sync.type = EV_SYN;
-  ev_sync.value = 0;
-  ev_sync.code = 0;
-  int res_ev_sync = write(fd, &ev_sync, sizeof(ev_sync));
-
-  std::cout << "res syn : " << res_ev_sync << "\n";
-}
-
-// 鼠标移动模拟
-void simulate_mouse(int fd, int x, int y) {
-  struct input_event ev;
-  memset(&ev, 0, sizeof(struct input_event));
-  gettimeofday(&ev.time, NULL);
-  ev.type = EV_REL;
-  ev.code = REL_X;
-  ev.value = x;
-  if (write(fd, &ev, sizeof(struct input_event)) < 0)
-    LOG_ERROR("error: write1");
-  memset(&ev, 0, sizeof(struct input_event));
-  ev.type = EV_SYN;
-  if (write(fd, &ev, sizeof(struct input_event)) < 0)
-    LOG_ERROR("error: write4");
-
-  memset(&ev, 0, sizeof(struct input_event));
-  ev.type = EV_REL;
-  ev.code = REL_Y;
-  ev.value = y;
-  if (write(fd, &ev, sizeof(struct input_event)) < 0)
-    LOG_ERROR("error: write2");
-  memset(&ev, 0, sizeof(struct input_event));
-  ev.type = EV_SYN;
-  if (write(fd, &ev, sizeof(struct input_event)) < 0)
-    LOG_ERROR("error: write3");
-
-  // 同步
-  // ev.type = EV_SYN;
-  // ev.value = 0;
-  // ev.code = SYN_REPORT;
-  // write(fd, &ev, sizeof(ev));
-}
-
-void simulate_mouse_abs(int fd, int x, int y) {
-  struct input_event ev;
-  memset(&ev, 0, sizeof(struct input_event));
-  gettimeofday(&ev.time, NULL);
-  ev.type = EV_ABS;
-  ev.code = ABS_X;
-  ev.value = x;
-  if (write(fd, &ev, sizeof(struct input_event)) < 0)
-    LOG_ERROR("error: write1");
-  memset(&ev, 0, sizeof(struct input_event));
-  ev.type = EV_SYN;
-  if (write(fd, &ev, sizeof(struct input_event)) < 0)
-    LOG_ERROR("error: write4");
-
-  memset(&ev, 0, sizeof(struct input_event));
-  ev.type = EV_ABS;
-  ev.code = ABS_Y;
-  ev.value = y;
-  if (write(fd, &ev, sizeof(struct input_event)) < 0)
-    LOG_ERROR("error: write2");
-  memset(&ev, 0, sizeof(struct input_event));
-  ev.type = EV_SYN;
-  if (write(fd, &ev, sizeof(struct input_event)) < 0)
-    LOG_ERROR("error: write3");
-
-  // 同步
-  ev.type = EV_SYN;
-  ev.value = 0;
-  ev.code = SYN_REPORT;
-  write(fd, &ev, sizeof(ev));
-}
-#endif
-
 void ServerReceiveDataBuffer(const char *data, size_t size, const char *user_id,
                              size_t user_id_size) {
   std::string user(user_id, user_id_size);
@@ -528,87 +405,34 @@ void ServerReceiveDataBuffer(const char *data, size_t size, const char *user_id,
 
 #if 1
 #ifdef _WIN32
-  INPUT ip;
-
-  if (remote_action.type == ControlType::mouse) {
-    ip.type = INPUT_MOUSE;
-    ip.mi.dx = remote_action.m.x * screen_w / 1280;
-    ip.mi.dy = remote_action.m.y * screen_h / 720;
-    if (remote_action.m.flag == MouseFlag::left_down) {
-      ip.mi.dwFlags = MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_ABSOLUTE;
-    } else if (remote_action.m.flag == MouseFlag::left_up) {
-      ip.mi.dwFlags = MOUSEEVENTF_LEFTUP | MOUSEEVENTF_ABSOLUTE;
-    } else if (remote_action.m.flag == MouseFlag::right_down) {
-      ip.mi.dwFlags = MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_ABSOLUTE;
-    } else if (remote_action.m.flag == MouseFlag::right_up) {
-      ip.mi.dwFlags = MOUSEEVENTF_RIGHTUP | MOUSEEVENTF_ABSOLUTE;
-    } else {
-      ip.mi.dwFlags = MOUSEEVENTF_MOVE;
-    }
-    ip.mi.mouseData = 0;
-    ip.mi.time = 0;
-
-    // Set cursor pos
-    SetCursorPos(ip.mi.dx, ip.mi.dy);
-    // Send the press
-    if (ip.mi.dwFlags != MOUSEEVENTF_MOVE) {
-      SendInput(1, &ip, sizeof(INPUT));
-    }
-
-    // std::cout << "Receive data from [" << user << "], " << ip.type << " "
-    //           << ip.mi.dwFlags << " " << ip.mi.dx << " " << ip.mi.dy
-    //           << std::endl;
-  }
+  mouse_controller->SendCommand(remote_action);
 
 #elif __APPLE__
-  if (remote_action.type == ControlType::mouse) {
-    CGEventRef mouse_event;
-    CGEventType mouse_type;
-
-    if (remote_action.m.flag == MouseFlag::left_down) {
-      mouse_type = kCGEventLeftMouseDown;
-    } else if (remote_action.m.flag == MouseFlag::left_up) {
-      mouse_type = kCGEventLeftMouseUp;
-    } else if (remote_action.m.flag == MouseFlag::right_down) {
-      mouse_type = kCGEventRightMouseDown;
-    } else if (remote_action.m.flag == MouseFlag::right_up) {
-      mouse_type = kCGEventRightMouseUp;
-    } else {
-      mouse_type = kCGEventMouseMoved;
-    }
-
-    mouse_event = CGEventCreateMouseEvent(NULL, mouse_type,
-                                          CGPointMake(mouse_pos_x, mouse_pos_y),
-                                          kCGMouseButtonLeft);
-
-    CGEventPost(kCGHIDEventTap, mouse_event);
-    CFRelease(mouse_event);
-  }
-#elif __linux__
   // if (remote_action.type == ControlType::mouse) {
-  //   struct input_event event;
-  //   memset(&event, 0, sizeof(event));
-  //   gettimeofday(&event.time, NULL);
+  //   CGEventRef mouse_event;
+  //   CGEventType mouse_type;
 
   //   if (remote_action.m.flag == MouseFlag::left_down) {
-  //     simulate_key_down(uinput_fd, BTN_LEFT);
+  //     mouse_type = kCGEventLeftMouseDown;
   //   } else if (remote_action.m.flag == MouseFlag::left_up) {
-  //     simulate_key_up(uinput_fd, BTN_LEFT);
+  //     mouse_type = kCGEventLeftMouseUp;
   //   } else if (remote_action.m.flag == MouseFlag::right_down) {
-  //     simulate_key_down(uinput_fd, BTN_RIGHT);
+  //     mouse_type = kCGEventRightMouseDown;
   //   } else if (remote_action.m.flag == MouseFlag::right_up) {
-  //     simulate_key_up(uinput_fd, BTN_RIGHT);
+  //     mouse_type = kCGEventRightMouseUp;
   //   } else {
-  //     mouseSetPosition(uinput_fd, mouse_pos_x, mouse_pos_y);
-  //     // simulate_mouse(uinput_fd, rel_x, rel_y);
-  //     // simulate_mouse_abs(uinput_fd, 65535, 65535);
-  //     mouse_pos_x_last = mouse_pos_x;
-  //     mouse_pos_y_last = mouse_pos_y;
+  //     mouse_type = kCGEventMouseMoved;
   //   }
 
-  //   // report_key(EV_KEY, KEY_A, 1);  // Report BUTTON A CLICK - PRESS event
-  //   // report_key(EV_KEY, KEY_A, 0);
+  //   mouse_event = CGEventCreateMouseEvent(NULL, mouse_type,
+  //                                         CGPointMake(mouse_pos_x,
+  //                                         mouse_pos_y), kCGMouseButtonLeft);
+
+  //   CGEventPost(kCGHIDEventTap, mouse_event);
+  //   CFRelease(mouse_event);
   // }
+#elif __linux__
+
   mouse_controller->SendCommand(remote_action);
 #endif
 #endif
@@ -992,6 +816,11 @@ int main() {
 
       nv12_buffer = new char[NV12_BUFFER_SIZE];
 #ifdef _WIN32
+      device_controller_factory = new DeviceControllerFactory();
+      mouse_controller = (MouseController *)device_controller_factory->Create(
+          DeviceControllerFactory::Device::Mouse);
+      mouse_controller->Init(screen_w, screen_h);
+
       screen_capture = new ScreenCaptureWgc();
 
       RECORD_DESKTOP_RECT rect;

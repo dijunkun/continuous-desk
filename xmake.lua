@@ -71,8 +71,9 @@ target("device_controller")
     set_kind("object")
     add_deps("log")
     if is_os("windows") then
-        -- add_files("src/screen_capture/windows/*.cpp")
-        -- add_includedirs("src/screen_capture/windows", {public = true})
+        add_files("src/device_controller/mouse/windows/*.cpp")
+         add_includedirs("src/device_controller/mouse/windows", {public = true})
+         add_includedirs("src/device_controller", {public = true})
     elseif is_os("macosx") then
         --  add_files("src/screen_capture/macosx/*.cpp")
         --  add_includedirs("src/screen_capture/macosx", {public = true})
