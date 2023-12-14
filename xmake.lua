@@ -67,9 +67,24 @@ target("screen_capture")
          add_includedirs("src/screen_capture/linux", {public = true})
     end
 
+target("device_controller")
+    set_kind("object")
+    add_deps("log")
+    if is_os("windows") then
+        -- add_files("src/screen_capture/windows/*.cpp")
+        -- add_includedirs("src/screen_capture/windows", {public = true})
+    elseif is_os("macosx") then
+        --  add_files("src/screen_capture/macosx/*.cpp")
+        --  add_includedirs("src/screen_capture/macosx", {public = true})
+    elseif is_os("linux") then
+         add_files("src/device_controller/mouse/linux/*.cpp")
+         add_includedirs("src/device_controller/mouse/linux", {public = true})
+         add_includedirs("src/device_controller", {public = true})
+    end
+
 target("remote_desk")
     set_kind("binary")
-    add_deps("log", "screen_capture", "projectx")
+    add_deps("log", "screen_capture", "device_controller", "projectx")
     add_files("src/gui/main.cpp")
 
     -- after_install(function (target)

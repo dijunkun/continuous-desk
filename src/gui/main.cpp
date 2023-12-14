@@ -56,6 +56,7 @@ extern "C" {
 #include "screen_capture_avf.h"
 #endif
 #include "../../thirdparty/projectx/src/interface/x.h"
+#include "device_controller_factory.h"
 
 #define NV12_BUFFER_SIZE 1280 * 720 * 3 / 2
 
@@ -170,6 +171,9 @@ ScreenCaptureX11 *screen_capture = nullptr;
 ScreenCaptureAvf *screen_capture = nullptr;
 #endif
 
+DeviceControllerFactory *device_controller_factory = nullptr;
+MouseController *mouse_controller = nullptr;
+
 char *nv12_buffer = nullptr;
 
 #ifdef __linux__
@@ -186,27 +190,26 @@ static std::atomic<int> mouse_pos_y_last = -65535;
 std::chrono::steady_clock::time_point last_frame_time_;
 #endif
 
-typedef enum { mouse = 0, keyboard } ControlType;
-typedef enum { move = 0, left_down, left_up, right_down, right_up } MouseFlag;
-typedef enum { key_down = 0, key_up } KeyFlag;
-typedef struct {
-  size_t x;
-  size_t y;
-  MouseFlag flag;
-} Mouse;
+// typedef enum { mouse = 0, keyboard } ControlType;
+// typedef enum { move = 0, left_down, left_up, right_down, right_up }
+// MouseFlag; typedef enum { key_down = 0, key_up } KeyFlag; typedef struct {
+//   size_t x;
+//   size_t y;
+//   MouseFlag flag;
+// } Mouse;
 
-typedef struct {
-  size_t key_value;
-  KeyFlag flag;
-} Key;
+// typedef struct {
+//   size_t key_value;
+//   KeyFlag flag;
+// } Key;
 
-typedef struct {
-  ControlType type;
-  union {
-    Mouse m;
-    Key k;
-  };
-} RemoteAction;
+// typedef struct {
+//   ControlType type;
+//   union {
+//     Mouse m;
+//     Key k;
+//   };
+// } RemoteAction;
 
 inline int ProcessMouseKeyEven(SDL_Event &ev) {
   float ratio = 1280.0 / window_w;
@@ -582,30 +585,31 @@ void ServerReceiveDataBuffer(const char *data, size_t size, const char *user_id,
     CFRelease(mouse_event);
   }
 #elif __linux__
-  if (remote_action.type == ControlType::mouse) {
-    struct input_event event;
-    memset(&event, 0, sizeof(event));
-    gettimeofday(&event.time, NULL);
+  // if (remote_action.type == ControlType::mouse) {
+  //   struct input_event event;
+  //   memset(&event, 0, sizeof(event));
+  //   gettimeofday(&event.time, NULL);
 
-    if (remote_action.m.flag == MouseFlag::left_down) {
-      simulate_key_down(uinput_fd, BTN_LEFT);
-    } else if (remote_action.m.flag == MouseFlag::left_up) {
-      simulate_key_up(uinput_fd, BTN_LEFT);
-    } else if (remote_action.m.flag == MouseFlag::right_down) {
-      simulate_key_down(uinput_fd, BTN_RIGHT);
-    } else if (remote_action.m.flag == MouseFlag::right_up) {
-      simulate_key_up(uinput_fd, BTN_RIGHT);
-    } else {
-      mouseSetPosition(uinput_fd, mouse_pos_x, mouse_pos_y);
-      // simulate_mouse(uinput_fd, rel_x, rel_y);
-      // simulate_mouse_abs(uinput_fd, 65535, 65535);
-      mouse_pos_x_last = mouse_pos_x;
-      mouse_pos_y_last = mouse_pos_y;
-    }
+  //   if (remote_action.m.flag == MouseFlag::left_down) {
+  //     simulate_key_down(uinput_fd, BTN_LEFT);
+  //   } else if (remote_action.m.flag == MouseFlag::left_up) {
+  //     simulate_key_up(uinput_fd, BTN_LEFT);
+  //   } else if (remote_action.m.flag == MouseFlag::right_down) {
+  //     simulate_key_down(uinput_fd, BTN_RIGHT);
+  //   } else if (remote_action.m.flag == MouseFlag::right_up) {
+  //     simulate_key_up(uinput_fd, BTN_RIGHT);
+  //   } else {
+  //     mouseSetPosition(uinput_fd, mouse_pos_x, mouse_pos_y);
+  //     // simulate_mouse(uinput_fd, rel_x, rel_y);
+  //     // simulate_mouse_abs(uinput_fd, 65535, 65535);
+  //     mouse_pos_x_last = mouse_pos_x;
+  //     mouse_pos_y_last = mouse_pos_y;
+  //   }
 
-    // report_key(EV_KEY, KEY_A, 1);  // Report BUTTON A CLICK - PRESS event
-    // report_key(EV_KEY, KEY_A, 0);
-  }
+  //   // report_key(EV_KEY, KEY_A, 1);  // Report BUTTON A CLICK - PRESS event
+  //   // report_key(EV_KEY, KEY_A, 0);
+  // }
+  mouse_controller->SendCommand(remote_action);
 #endif
 #endif
 }
@@ -1018,35 +1022,10 @@ int main() {
       screen_capture->Start();
 
 #elif __linux__
-      {
-        uinput_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
-        if (uinput_fd < 0) {
-          LOG_ERROR("Cannot open device: /dev/uinput");
-        }
-
-        ioctl(uinput_fd, UI_SET_EVBIT, EV_KEY);
-        ioctl(uinput_fd, UI_SET_KEYBIT, BTN_RIGHT);
-        ioctl(uinput_fd, UI_SET_KEYBIT, BTN_LEFT);
-        ioctl(uinput_fd, UI_SET_EVBIT, EV_ABS);
-        ioctl(uinput_fd, UI_SET_ABSBIT, ABS_X);
-        ioctl(uinput_fd, UI_SET_ABSBIT, ABS_Y);
-        ioctl(uinput_fd, UI_SET_EVBIT, EV_REL);
-
-        struct uinput_user_dev uidev;
-        memset(&uidev, 0, sizeof(uidev));
-        snprintf(uidev.name, UINPUT_MAX_NAME_SIZE, "VirtualMouse");
-        uidev.id.bustype = BUS_USB;
-        uidev.id.version = 1;
-        uidev.id.vendor = 0x1;
-        uidev.id.product = 0x1;
-        uidev.absmin[ABS_X] = 0;
-        uidev.absmax[ABS_X] = screen_w;
-        uidev.absmin[ABS_Y] = 0;
-        uidev.absmax[ABS_Y] = screen_h;
-
-        write(uinput_fd, &uidev, sizeof(uidev));
-        ioctl(uinput_fd, UI_DEV_CREATE);
-      }
+      device_controller_factory = new DeviceControllerFactory();
+      mouse_controller = (MouseController *)device_controller_factory->Create(
+          DeviceControllerFactory::Device::Mouse);
+      mouse_controller->Init(screen_w, screen_h);
 
       screen_capture = new ScreenCaptureX11();
 
@@ -1394,10 +1373,7 @@ int main() {
   SDL_CloseAudioDevice(output_dev);
   SDL_CloseAudioDevice(input_dev);
 
-#ifdef __linux__
-  ioctl(uinput_fd, UI_DEV_DESTROY);
-  close(uinput_fd);
-#endif
+  mouse_controller->Destroy();
 
   ImGui_ImplSDLRenderer2_Shutdown();
   ImGui_ImplSDL2_Shutdown();
