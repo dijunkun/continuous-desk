@@ -743,9 +743,6 @@ int main() {
       mouse_controller = (MouseController *)device_controller_factory->Create(
           DeviceControllerFactory::Device::Mouse);
       mouse_controller->Init(screen_w, screen_h);
-
-      screen_capture = new ScreenCaptureAvf();
-
       last_frame_time_ = std::chrono::high_resolution_clock::now();
       screen_capture->Init(
           rect, 60,
@@ -756,11 +753,20 @@ int main() {
             auto tc = duration.count() * 1000;
 
             if (tc >= 0) {
+#ifdef _WIN32
+              BGRAToNV12FFmpeg(data, width, height,
+                               (unsigned char *)nv12_buffer);
+              SendData(peer_server, DATA_TYPE::VIDEO, (const char *)nv12_buffer,
+                       NV12_BUFFER_SIZE);
+#else
               SendData(peer_server, DATA_TYPE::VIDEO, (const char *)data,
                        NV12_BUFFER_SIZE);
               last_frame_time_ = now_time;
+#endif
+              last_frame_time_ = now_time;
             }
           });
+
       screen_capture->Start();
     }
   });
