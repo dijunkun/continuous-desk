@@ -5,8 +5,8 @@ set_license("LGPL-3.0")
 add_rules("mode.release", "mode.debug")
 set_languages("c++17")
 
--- set_policy("build.warning", true)
--- set_warnings("all", "extra")
+set_policy("build.warning", true)
+set_warnings("all", "extra")
 
 add_defines("UNICODE")
 if is_mode("debug") then
@@ -53,40 +53,39 @@ target("log")
     add_headerfiles("src/log/log.h")
     add_includedirs("src/log", {public = true})
 
-target("screen_capture")
+target("screen_capturer")
     set_kind("object")
     add_deps("log")
+    add_includedirs("src/screen_capturer", {public = true})
     if is_os("windows") then
-        add_files("src/screen_capture/windows/*.cpp")
-        add_includedirs("src/screen_capture/windows", {public = true})
+        add_files("src/screen_capturer/windows/*.cpp")
+        add_includedirs("src/screen_capturer/windows", {public = true})
     elseif is_os("macosx") then
-         add_files("src/screen_capture/macosx/*.cpp")
-         add_includedirs("src/screen_capture/macosx", {public = true})
+         add_files("src/screen_capturer/macosx/*.cpp")
+         add_includedirs("src/screen_capturer/macosx", {public = true})
     elseif is_os("linux") then
-         add_files("src/screen_capture/linux/*.cpp")
-         add_includedirs("src/screen_capture/linux", {public = true})
+         add_files("src/screen_capturer/linux/*.cpp")
+         add_includedirs("src/screen_capturer/linux", {public = true})
     end
 
 target("device_controller")
     set_kind("object")
     add_deps("log")
+    add_includedirs("src/device_controller", {public = true})
     if is_os("windows") then
         add_files("src/device_controller/mouse/windows/*.cpp")
         add_includedirs("src/device_controller/mouse/windows", {public = true})
-        add_includedirs("src/device_controller", {public = true})
     elseif is_os("macosx") then
         add_files("src/device_controller/mouse/mac/*.cpp")
         add_includedirs("src/device_controller/mouse/mac", {public = true})
-        add_includedirs("src/device_controller", {public = true})
     elseif is_os("linux") then
          add_files("src/device_controller/mouse/linux/*.cpp")
          add_includedirs("src/device_controller/mouse/linux", {public = true})
-         add_includedirs("src/device_controller", {public = true})
     end
 
 target("remote_desk")
     set_kind("binary")
-    add_deps("log", "screen_capture", "device_controller", "projectx")
+    add_deps("log", "screen_capturer", "device_controller", "projectx")
     add_files("src/gui/main.cpp")
 
     -- after_install(function (target)
@@ -97,20 +96,20 @@ target("remote_desk")
     --     os.rm("$(projectdir)/out/lib")
     -- end)
 
--- target("screen_capture")
+-- target("screen_capturer")
 --     set_kind("binary")
 --     add_packages("sdl2", "imgui",  "ffmpeg", "openh264")
---     add_files("test/screen_capture/linux_capture.cpp")
+--     add_files("test/screen_capturer/linux_capture.cpp")
 --     add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
 --     "-lswscale", "-lavutil", "-lswresample",
 --     "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 
 --     "-lxcb-shm", "-lXext", "-lX11", "-lXv", "-lpthread", "-lSDL2", "-lopenh264",
 --     "-ldl", {force = true})
 
--- target("screen_capture")
+-- target("screen_capturer")
 --     set_kind("binary")
 --     add_packages("sdl2", "imgui",  "ffmpeg", "openh264")
---     add_files("test/screen_capture/mac_capture.cpp")
+--     add_files("test/screen_capturer/mac_capture.cpp")
 --     add_ldflags("-lavformat", "-lavdevice", "-lavfilter", "-lavcodec",
 --     "-lswscale", "-lavutil", "-lswresample",
 --     "-lasound", "-lxcb-shape", "-lxcb-xfixes", "-lsndio", "-lxcb", 

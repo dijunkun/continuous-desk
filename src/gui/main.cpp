@@ -28,33 +28,20 @@
 #include <thread>
 
 extern "C" {
-#include <libavcodec/avcodec.h>
 #include <libavdevice/avdevice.h>
-#include <libavfilter/avfilter.h>
-#include <libavformat/avformat.h>
-#include <libavutil/channel_layout.h>
-#include <libavutil/imgutils.h>
-#include <libavutil/opt.h>
-#include <libavutil/samplefmt.h>
 #include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
 };
 
 #include <stdio.h>
 
+#include "../../thirdparty/projectx/src/interface/x.h"
+#include "device_controller_factory.h"
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_sdlrenderer2.h"
 #include "log.h"
-#ifdef _WIN32
-#include "screen_capture_wgc.h"
-#elif __linux__
-#include "screen_capture_x11.h"
-#elif __APPLE__
-#include "screen_capture_avf.h"
-#endif
-#include "../../thirdparty/projectx/src/interface/x.h"
-#include "device_controller_factory.h"
+#include "screen_capturer_factory.h"
 
 #define NV12_BUFFER_SIZE 1280 * 720 * 3 / 2
 
@@ -161,13 +148,8 @@ static char mac_addr[16];
 static bool is_create_connection = false;
 static bool done = false;
 
-#ifdef _WIN32
-ScreenCaptureWgc *screen_capture = nullptr;
-#elif __linux__
-ScreenCaptureX11 *screen_capture = nullptr;
-#elif __APPLE__
-ScreenCaptureAvf *screen_capture = nullptr;
-#endif
+ScreenCapturerFactory *screen_capturer_factory = nullptr;
+ScreenCapturer *screen_capturer = nullptr;
 
 DeviceControllerFactory *device_controller_factory = nullptr;
 MouseController *mouse_controller = nullptr;
@@ -176,43 +158,16 @@ char *nv12_buffer = nullptr;
 
 #ifdef __linux__
 std::chrono::_V2::system_clock::time_point last_frame_time_;
-static int uinput_fd;
-static struct uinput_user_dev uinput_dev;
-#define KEY_CUSTOM_UP 0x20
-#define KEY_CUSTOM_DOWN 0x30
-static int fd_mouse = -1;
-static int fd_kbd = -1;
-static std::atomic<int> mouse_pos_x_last = -65535;
-static std::atomic<int> mouse_pos_y_last = -65535;
 #else
 std::chrono::steady_clock::time_point last_frame_time_;
 #endif
 
-// typedef enum { mouse = 0, keyboard } ControlType;
-// typedef enum { move = 0, left_down, left_up, right_down, right_up }
-// MouseFlag; typedef enum { key_down = 0, key_up } KeyFlag; typedef struct {
-//   size_t x;
-//   size_t y;
-//   MouseFlag flag;
-// } Mouse;
-
-// typedef struct {
-//   size_t key_value;
-//   KeyFlag flag;
-// } Key;
-
-// typedef struct {
-//   ControlType type;
-//   union {
-//     Mouse m;
-//     Key k;
-//   };
-// } RemoteAction;
-
 inline int ProcessMouseKeyEven(SDL_Event &ev) {
-  float ratio = 1280.0 / window_w;
+  float ratio = (float)(1280.0 / window_w);
 
   RemoteAction remote_action;
+  remote_action.m.x = (size_t)(ev.button.x * ratio);
+  remote_action.m.y = (size_t)(ev.button.y * ratio);
 
   if (SDL_KEYDOWN == ev.type)  // SDL_KEYUP
   {
@@ -230,49 +185,24 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
       // printf("SDLK_RIGHT  \n");
     }
   } else if (SDL_MOUSEBUTTONDOWN == ev.type) {
+    remote_action.type = ControlType::mouse;
     if (SDL_BUTTON_LEFT == ev.button.button) {
-      remote_action.type = ControlType::mouse;
       remote_action.m.flag = MouseFlag::left_down;
-      remote_action.m.x = ev.button.x * ratio;
-      remote_action.m.y = ev.button.y * ratio;
-
-      SendData(peer_client, DATA_TYPE::DATA, (const char *)&remote_action,
-               sizeof(remote_action));
-
     } else if (SDL_BUTTON_RIGHT == ev.button.button) {
-      remote_action.type = ControlType::mouse;
       remote_action.m.flag = MouseFlag::right_down;
-      remote_action.m.x = ev.button.x * ratio;
-      remote_action.m.y = ev.button.y * ratio;
-
-      SendData(peer_client, DATA_TYPE::DATA, (const char *)&remote_action,
-               sizeof(remote_action));
     }
+    SendData(peer_client, DATA_TYPE::DATA, (const char *)&remote_action,
+             sizeof(remote_action));
   } else if (SDL_MOUSEBUTTONUP == ev.type) {
     if (SDL_BUTTON_LEFT == ev.button.button) {
-      remote_action.type = ControlType::mouse;
       remote_action.m.flag = MouseFlag::left_up;
-      remote_action.m.x = ev.button.x * ratio;
-      remote_action.m.y = ev.button.y * ratio;
-
-      SendData(peer_client, DATA_TYPE::DATA, (const char *)&remote_action,
-               sizeof(remote_action));
-
     } else if (SDL_BUTTON_RIGHT == ev.button.button) {
-      remote_action.type = ControlType::mouse;
       remote_action.m.flag = MouseFlag::right_up;
-      remote_action.m.x = ev.button.x * ratio;
-      remote_action.m.y = ev.button.y * ratio;
-
-      SendData(peer_client, DATA_TYPE::DATA, (const char *)&remote_action,
-               sizeof(remote_action));
     }
+    SendData(peer_client, DATA_TYPE::DATA, (const char *)&remote_action,
+             sizeof(remote_action));
   } else if (SDL_MOUSEMOTION == ev.type) {
-    remote_action.type = ControlType::mouse;
     remote_action.m.flag = MouseFlag::move;
-    remote_action.m.x = ev.button.x * ratio;
-    remote_action.m.y = ev.button.y * ratio;
-
     SendData(peer_client, DATA_TYPE::DATA, (const char *)&remote_action,
              sizeof(remote_action));
   } else if (SDL_QUIT == ev.type) {
@@ -288,8 +218,8 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
 
 void SdlCaptureAudioIn(void *userdata, Uint8 *stream, int len) {
   int64_t delay = swr_get_delay(swr_ctx, src_rate);
-  dst_nb_samples =
-      av_rescale_rnd(delay + src_nb_samples, dst_rate, src_rate, AV_ROUND_UP);
+  dst_nb_samples = (int)av_rescale_rnd(delay + src_nb_samples, dst_rate,
+                                       src_rate, AV_ROUND_UP);
   if (dst_nb_samples > max_dst_nb_samples) {
     av_freep(&dst_data[0]);
     ret = av_samples_alloc(dst_data, &dst_linesize, dst_nb_channels,
@@ -392,11 +322,12 @@ void ServerReceiveDataBuffer(const char *data, size_t size, const char *user_id,
   RemoteAction remote_action;
   memcpy(&remote_action, data, sizeof(remote_action));
 
-  std::cout << "remote_action: " << remote_action.type << " "
-            << remote_action.m.flag << " " << remote_action.m.x << " "
-            << remote_action.m.y << std::endl;
-
+  // std::cout << "remote_action: " << remote_action.type << " "
+  //           << remote_action.m.flag << " " << remote_action.m.x << " "
+  //           << remote_action.m.y << std::endl;
+#if MOUSE_CONTROL
   mouse_controller->SendCommand(remote_action);
+#endif
 }
 
 void ClientReceiveDataBuffer(const char *data, size_t size, const char *user_id,
@@ -627,30 +558,6 @@ std::string GetMac(char *mac_addr) {
   return mac_addr;
 }
 
-int BGRAToNV12FFmpeg(unsigned char *src_buffer, int width, int height,
-                     unsigned char *dst_buffer) {
-  AVFrame *Input_pFrame = av_frame_alloc();
-  AVFrame *Output_pFrame = av_frame_alloc();
-  struct SwsContext *img_convert_ctx =
-      sws_getContext(width, height, AV_PIX_FMT_BGRA, 1280, 720, AV_PIX_FMT_NV12,
-                     SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
-
-  av_image_fill_arrays(Input_pFrame->data, Input_pFrame->linesize, src_buffer,
-                       AV_PIX_FMT_BGRA, width, height, 1);
-  av_image_fill_arrays(Output_pFrame->data, Output_pFrame->linesize, dst_buffer,
-                       AV_PIX_FMT_NV12, 1280, 720, 1);
-
-  sws_scale(img_convert_ctx, (uint8_t const **)Input_pFrame->data,
-            Input_pFrame->linesize, 0, height, Output_pFrame->data,
-            Output_pFrame->linesize);
-
-  if (Input_pFrame) av_free(Input_pFrame);
-  if (Output_pFrame) av_free(Output_pFrame);
-  if (img_convert_ctx) sws_freeContext(img_convert_ctx);
-
-  return 0;
-}
-
 int main() {
   LOG_INFO("Remote desk");
 
@@ -721,30 +628,18 @@ int main() {
 
       nv12_buffer = new char[NV12_BUFFER_SIZE];
 
-      RECORD_DESKTOP_RECT rect;
+      // Screen capture
+      screen_capturer_factory = new ScreenCapturerFactory();
+      screen_capturer = (ScreenCapturer *)screen_capturer_factory->Create();
+
+      last_frame_time_ = std::chrono::high_resolution_clock::now();
+      ScreenCapturer::RECORD_DESKTOP_RECT rect;
       rect.left = 0;
       rect.top = 0;
-
-#ifdef _WIN32
       rect.right = GetSystemMetrics(SM_CXSCREEN);
       rect.bottom = GetSystemMetrics(SM_CYSCREEN);
-      screen_capture = new ScreenCaptureWgc();
-#elif __linux__
-      rect.right = 0;
-      rect.bottom = 0;
-      screen_capture = new ScreenCaptureX11();
-#elif __APPLE__
-      rect.right = 0;
-      rect.bottom = 0;
-      screen_capture = new ScreenCaptureAvf();
-#endif
 
-      device_controller_factory = new DeviceControllerFactory();
-      mouse_controller = (MouseController *)device_controller_factory->Create(
-          DeviceControllerFactory::Device::Mouse);
-      mouse_controller->Init(screen_w, screen_h);
-      last_frame_time_ = std::chrono::high_resolution_clock::now();
-      screen_capture->Init(
+      screen_capturer->Init(
           rect, 60,
           [](unsigned char *data, int size, int width, int height) -> void {
             auto now_time = std::chrono::high_resolution_clock::now();
@@ -753,21 +648,19 @@ int main() {
             auto tc = duration.count() * 1000;
 
             if (tc >= 0) {
-#ifdef _WIN32
-              BGRAToNV12FFmpeg(data, width, height,
-                               (unsigned char *)nv12_buffer);
-              SendData(peer_server, DATA_TYPE::VIDEO, (const char *)nv12_buffer,
-                       NV12_BUFFER_SIZE);
-#else
               SendData(peer_server, DATA_TYPE::VIDEO, (const char *)data,
                        NV12_BUFFER_SIZE);
-              last_frame_time_ = now_time;
-#endif
               last_frame_time_ = now_time;
             }
           });
 
-      screen_capture->Start();
+      screen_capturer->Start();
+
+      // Mouse control
+      device_controller_factory = new DeviceControllerFactory();
+      mouse_controller = (MouseController *)device_controller_factory->Create(
+          DeviceControllerFactory::Device::Mouse);
+      mouse_controller->Init(screen_w, screen_h);
     }
   });
 

@@ -1,35 +1,30 @@
-#ifndef _SCREEN_CAPTURE_WGC_H_
-#define _SCREEN_CAPTURE_WGC_H_
+#ifndef _SCREEN_CAPTURER_WGC_H_
+#define _SCREEN_CAPTURER_WGC_H_
 
 #include <atomic>
 #include <functional>
 #include <string>
 #include <thread>
 
+#include "screen_capturer.h"
 #include "wgc_session.h"
 #include "wgc_session_impl.h"
 
-typedef struct {
-  int left;
-  int top;
-  int right;
-  int bottom;
-} RECORD_DESKTOP_RECT;
-
-typedef std::function<void(unsigned char *, int, int, int)> cb_desktop_data;
-typedef std::function<void(int)> cb_desktop_error;
-
-class ScreenCaptureWgc : public WgcSession::wgc_session_observer {
+class ScreenCapturerWgc : public ScreenCapturer,
+                          public WgcSession::wgc_session_observer {
  public:
-  ScreenCaptureWgc();
-  ~ScreenCaptureWgc();
+  ScreenCapturerWgc();
+  ~ScreenCapturerWgc();
 
  public:
   bool IsWgcSupported();
 
-  int Init(const RECORD_DESKTOP_RECT &rect, const int fps, cb_desktop_data cb);
+  virtual int Init(const RECORD_DESKTOP_RECT &rect, const int fps,
+                   cb_desktop_data cb);
+  virtual int Destroy();
 
-  int Start();
+  virtual int Start();
+
   int Pause();
   int Resume();
   int Stop();
@@ -55,7 +50,8 @@ class ScreenCaptureWgc : public WgcSession::wgc_session_observer {
   int _fps;
 
   cb_desktop_data _on_data;
-  cb_desktop_error _on_error;
+
+  unsigned char *nv12_frame_ = nullptr;
 };
 
 #endif

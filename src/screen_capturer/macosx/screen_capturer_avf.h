@@ -4,13 +4,15 @@
  * Copyright (c) 2023 by DI JUNKUN, All Rights Reserved.
  */
 
-#ifndef _SCREEN_CAPTURE_AVF_H_
-#define _SCREEN_CAPTURE_AVF_H_
+#ifndef _SCREEN_CAPTURER_AVF_H_
+#define _SCREEN_CAPTURER_AVF_H_
 
 #include <atomic>
 #include <functional>
 #include <string>
 #include <thread>
+
+#include "screen_capturer.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,25 +26,18 @@ extern "C" {
 };
 #endif
 
-typedef struct {
-  int left;
-  int top;
-  int right;
-  int bottom;
-} RECORD_DESKTOP_RECT;
-
-typedef std::function<void(unsigned char *, int, int, int)> cb_desktop_data;
-typedef std::function<void(int)> cb_desktop_error;
-
-class ScreenCaptureAvf {
+class ScreenCapturerAvf : public ScreenCapturer {
  public:
-  ScreenCaptureAvf();
-  ~ScreenCaptureAvf();
+  ScreenCapturerAvf();
+  ~ScreenCapturerAvf();
 
  public:
-  int Init(const RECORD_DESKTOP_RECT &rect, const int fps, cb_desktop_data cb);
+  virtual int Init(const RECORD_DESKTOP_RECT &rect, const int fps,
+                   cb_desktop_data cb);
+  virtual int Destroy();
 
-  int Start();
+  virtual int Start();
+
   int Pause();
   int Resume();
   int Stop();
@@ -66,7 +61,6 @@ class ScreenCaptureAvf {
   int _fps;
 
   cb_desktop_data _on_data;
-  cb_desktop_error _on_error;
 
  private:
   int i_ = 0;

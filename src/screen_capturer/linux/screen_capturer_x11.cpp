@@ -1,4 +1,4 @@
-#include "screen_capture_x11.h"
+#include "screen_capturer_x11.h"
 
 #include <iostream>
 
@@ -7,16 +7,12 @@
 #define NV12_BUFFER_SIZE 1280 * 720 * 3 / 2
 unsigned char nv12_buffer_[NV12_BUFFER_SIZE];
 
-ScreenCaptureX11::ScreenCaptureX11() {}
+ScreenCapturerX11::ScreenCapturerX11() {}
 
-ScreenCaptureX11::~ScreenCaptureX11() {
-  if (capture_thread_->joinable()) {
-    capture_thread_->join();
-  }
-}
+ScreenCapturerX11::~ScreenCapturerX11() {}
 
-int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
-                           cb_desktop_data cb) {
+int ScreenCapturerX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
+                            cb_desktop_data cb) {
   if (cb) {
     _on_data = cb;
   }
@@ -98,7 +94,15 @@ int ScreenCaptureX11::Init(const RECORD_DESKTOP_RECT &rect, const int fps,
   return 0;
 }
 
-int ScreenCaptureX11::Start() {
+int ScreenCapturerX11::Destroy() {
+  if (capture_thread_->joinable()) {
+    capture_thread_->join();
+  }
+
+  return 0;
+}
+
+int ScreenCapturerX11::Start() {
   capture_thread_.reset(new std::thread([this]() {
     while (1) {
       if (av_read_frame(pFormatCtx_, packet_) >= 0) {
@@ -128,12 +132,12 @@ int ScreenCaptureX11::Start() {
   return 0;
 }
 
-int ScreenCaptureX11::Pause() { return 0; }
+int ScreenCapturerX11::Pause() { return 0; }
 
-int ScreenCaptureX11::Resume() { return 0; }
+int ScreenCapturerX11::Resume() { return 0; }
 
-int ScreenCaptureX11::Stop() { return 0; }
+int ScreenCapturerX11::Stop() { return 0; }
 
-void ScreenCaptureX11::OnFrame() {}
+void ScreenCapturerX11::OnFrame() {}
 
-void ScreenCaptureX11::CleanUp() {}
+void ScreenCapturerX11::CleanUp() {}

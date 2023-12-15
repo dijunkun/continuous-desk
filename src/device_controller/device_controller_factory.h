@@ -12,7 +12,7 @@
 
 class DeviceControllerFactory {
  public:
-  enum Device { Mouse, Keyboard };
+  enum Device { Mouse = 0, Keyboard };
 
  public:
   virtual ~DeviceControllerFactory() {}
