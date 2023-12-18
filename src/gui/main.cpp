@@ -304,7 +304,7 @@ void ServerReceiveAudioBuffer(const char *data, size_t size,
   // audio_len = size;
   audio_buffer_fresh = true;
 
-  SDL_QueueAudio(output_dev, data, size);
+  SDL_QueueAudio(output_dev, data, (Uint32)size);
   // printf("queue audio\n");
 }
 
@@ -312,7 +312,7 @@ void ClientReceiveAudioBuffer(const char *data, size_t size,
                               const char *user_id, size_t user_id_size) {
   // std::cout << "Client receive audio, size " << size << ", user [" << user_id
   //           << "] " << std::endl;
-  SDL_QueueAudio(output_dev, data, size);
+  SDL_QueueAudio(output_dev, data, (Uint32)size);
 }
 
 void ServerReceiveDataBuffer(const char *data, size_t size, const char *user_id,
@@ -576,94 +576,6 @@ int main() {
     strncpy(input_password, cd_cache.password, sizeof(cd_cache.password));
   }
 
-  std::thread rtc_thread([] {
-    std::string default_cfg_path = "../../../../config/config.ini";
-    std::ifstream f(default_cfg_path.c_str());
-
-    Params server_params;
-    server_params.cfg_path =
-        f.good() ? "../../../../config/config.ini" : "config.ini";
-    server_params.on_receive_video_buffer = ServerReceiveVideoBuffer;
-    server_params.on_receive_audio_buffer = ServerReceiveAudioBuffer;
-    server_params.on_receive_data_buffer = ServerReceiveDataBuffer;
-    server_params.on_signal_status = ServerSignalStatus;
-    server_params.on_connection_status = ServerConnectionStatus;
-
-    Params client_params;
-    client_params.cfg_path =
-        f.good() ? "../../../../config/config.ini" : "config.ini";
-    client_params.on_receive_video_buffer = ClientReceiveVideoBuffer;
-    client_params.on_receive_audio_buffer = ClientReceiveAudioBuffer;
-    client_params.on_receive_data_buffer = ClientReceiveDataBuffer;
-    client_params.on_signal_status = ClientSignalStatus;
-    client_params.on_connection_status = ClientConnectionStatus;
-
-    std::string transmission_id = "000001";
-    GetMac(mac_addr);
-
-    peer_server = CreatePeer(&server_params);
-    LOG_INFO("Create peer_server");
-    std::string server_user_id = "S-" + std::string(GetMac(mac_addr));
-    Init(peer_server, server_user_id.c_str());
-    LOG_INFO("peer_server init finish");
-
-    peer_client = CreatePeer(&client_params);
-    LOG_INFO("Create peer_client");
-    std::string client_user_id = "C-" + std::string(GetMac(mac_addr));
-    Init(peer_client, client_user_id.c_str());
-    LOG_INFO("peer_client init finish");
-
-    {
-      while (SignalStatus::SignalConnected != server_signal_status && !done) {
-      }
-
-      if (done) {
-        return;
-      }
-
-      std::string user_id = "S-" + std::string(GetMac(mac_addr));
-      is_create_connection =
-          CreateConnection(peer_server, mac_addr, input_password) ? false
-                                                                  : true;
-
-      nv12_buffer = new char[NV12_BUFFER_SIZE];
-
-      // Screen capture
-      screen_capturer_factory = new ScreenCapturerFactory();
-      screen_capturer = (ScreenCapturer *)screen_capturer_factory->Create();
-
-      last_frame_time_ = std::chrono::high_resolution_clock::now();
-      ScreenCapturer::RECORD_DESKTOP_RECT rect;
-      rect.left = 0;
-      rect.top = 0;
-      rect.right = GetSystemMetrics(SM_CXSCREEN);
-      rect.bottom = GetSystemMetrics(SM_CYSCREEN);
-
-      screen_capturer->Init(
-          rect, 60,
-          [](unsigned char *data, int size, int width, int height) -> void {
-            auto now_time = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> duration =
-                now_time - last_frame_time_;
-            auto tc = duration.count() * 1000;
-
-            if (tc >= 0) {
-              SendData(peer_server, DATA_TYPE::VIDEO, (const char *)data,
-                       NV12_BUFFER_SIZE);
-              last_frame_time_ = now_time;
-            }
-          });
-
-      screen_capturer->Start();
-
-      // Mouse control
-      device_controller_factory = new DeviceControllerFactory();
-      mouse_controller = (MouseController *)device_controller_factory->Create(
-          DeviceControllerFactory::Device::Mouse);
-      mouse_controller->Init(screen_w, screen_h);
-    }
-  });
-
   // Setup SDL
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER |
                SDL_INIT_GAMECONTROLLER) != 0) {
@@ -755,6 +667,98 @@ int main() {
   bool show_demo_window = true;
   bool show_another_window = false;
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+  std::thread rtc_thread(
+      [](int screen_width, int screen_height) {
+        std::string default_cfg_path = "../../../../config/config.ini";
+        std::ifstream f(default_cfg_path.c_str());
+
+        Params server_params;
+        server_params.cfg_path =
+            f.good() ? "../../../../config/config.ini" : "config.ini";
+        server_params.on_receive_video_buffer = ServerReceiveVideoBuffer;
+        server_params.on_receive_audio_buffer = ServerReceiveAudioBuffer;
+        server_params.on_receive_data_buffer = ServerReceiveDataBuffer;
+        server_params.on_signal_status = ServerSignalStatus;
+        server_params.on_connection_status = ServerConnectionStatus;
+
+        Params client_params;
+        client_params.cfg_path =
+            f.good() ? "../../../../config/config.ini" : "config.ini";
+        client_params.on_receive_video_buffer = ClientReceiveVideoBuffer;
+        client_params.on_receive_audio_buffer = ClientReceiveAudioBuffer;
+        client_params.on_receive_data_buffer = ClientReceiveDataBuffer;
+        client_params.on_signal_status = ClientSignalStatus;
+        client_params.on_connection_status = ClientConnectionStatus;
+
+        std::string transmission_id = "000001";
+        GetMac(mac_addr);
+
+        peer_server = CreatePeer(&server_params);
+        LOG_INFO("Create peer_server");
+        std::string server_user_id = "S-" + std::string(GetMac(mac_addr));
+        Init(peer_server, server_user_id.c_str());
+        LOG_INFO("peer_server init finish");
+
+        peer_client = CreatePeer(&client_params);
+        LOG_INFO("Create peer_client");
+        std::string client_user_id = "C-" + std::string(GetMac(mac_addr));
+        Init(peer_client, client_user_id.c_str());
+        LOG_INFO("peer_client init finish");
+
+        {
+          while (SignalStatus::SignalConnected != server_signal_status &&
+                 !done) {
+          }
+
+          if (done) {
+            return;
+          }
+
+          std::string user_id = "S-" + std::string(GetMac(mac_addr));
+          is_create_connection =
+              CreateConnection(peer_server, mac_addr, input_password) ? false
+                                                                      : true;
+
+          nv12_buffer = new char[NV12_BUFFER_SIZE];
+
+          // Screen capture
+          screen_capturer_factory = new ScreenCapturerFactory();
+          screen_capturer = (ScreenCapturer *)screen_capturer_factory->Create();
+
+          last_frame_time_ = std::chrono::high_resolution_clock::now();
+          ScreenCapturer::RECORD_DESKTOP_RECT rect;
+          rect.left = 0;
+          rect.top = 0;
+          rect.right = screen_w;
+          rect.bottom = screen_h;
+
+          screen_capturer->Init(
+              rect, 60,
+              [](unsigned char *data, int size, int width, int height) -> void {
+                auto now_time = std::chrono::high_resolution_clock::now();
+                std::chrono::duration<double> duration =
+                    now_time - last_frame_time_;
+                auto tc = duration.count() * 1000;
+
+                if (tc >= 0) {
+                  SendData(peer_server, DATA_TYPE::VIDEO, (const char *)data,
+                           NV12_BUFFER_SIZE);
+                  last_frame_time_ = now_time;
+                }
+              });
+
+          screen_capturer->Start();
+
+          // Mouse control
+          device_controller_factory = new DeviceControllerFactory();
+          mouse_controller =
+              (MouseController *)device_controller_factory->Create(
+                  DeviceControllerFactory::Device::Mouse);
+          mouse_controller->Init(screen_w, screen_h);
+        }
+      },
+      screen_w, screen_h);
 
   // Main loop
   while (!done) {
