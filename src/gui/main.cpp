@@ -185,6 +185,7 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
     SendData(peer_client, DATA_TYPE::DATA, (const char *)&remote_action,
              sizeof(remote_action));
   } else if (SDL_MOUSEBUTTONUP == ev.type) {
+    remote_action.type = ControlType::mouse;
     if (SDL_BUTTON_LEFT == ev.button.button) {
       remote_action.m.flag = MouseFlag::left_up;
     } else if (SDL_BUTTON_RIGHT == ev.button.button) {
@@ -193,6 +194,7 @@ inline int ProcessMouseKeyEven(SDL_Event &ev) {
     SendData(peer_client, DATA_TYPE::DATA, (const char *)&remote_action,
              sizeof(remote_action));
   } else if (SDL_MOUSEMOTION == ev.type) {
+    remote_action.type = ControlType::mouse;
     remote_action.m.flag = MouseFlag::move;
     SendData(peer_client, DATA_TYPE::DATA, (const char *)&remote_action,
              sizeof(remote_action));
