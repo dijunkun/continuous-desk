@@ -112,6 +112,7 @@ PeerPtr *peer_server = nullptr;
 PeerPtr *peer_client = nullptr;
 bool joined = false;
 bool received_frame = false;
+bool menu_hovered = false;
 
 static bool connect_button_pressed = false;
 static const char *connect_label = "Connect";
@@ -367,6 +368,7 @@ void ClientConnectionStatus(ConnectionStatus status) {
     client_connection_status_str = "ClientConnecting";
   } else if (ConnectionStatus::Connected == status) {
     client_connection_status_str = "ClientConnected";
+    joined = true;
   } else if (ConnectionStatus::Disconnected == status) {
     client_connection_status_str = "ClientDisconnected";
   } else if (ConnectionStatus::Failed == status) {
@@ -655,6 +657,10 @@ int main() {
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
 
+    if (joined && !menu_hovered) {
+      ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+    }
+
     {
       static float f = 0.0f;
       static int counter = 0;
@@ -666,6 +672,7 @@ int main() {
       ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoResize);
 
       {
+        menu_hovered = ImGui::IsWindowHovered();
         ImGui::Text(" LOCAL ID:");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(95);
@@ -731,7 +738,7 @@ int main() {
                   std::string user_id = "C-" + mac_addr_str;
                   ret = JoinConnection(peer_client, remote_id, client_password);
                   if (0 == ret) {
-                    joined = true;
+                    // joined = true;
                   }
                 } else if (strcmp(connect_label, "Disconnect") == 0 && joined) {
                   ret = LeaveConnection(peer_client);
