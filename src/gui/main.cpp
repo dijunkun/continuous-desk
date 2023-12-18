@@ -59,10 +59,6 @@ uint32_t start_time, end_time, elapsed_time;
 uint32_t frame_count = 0;
 int fps = 0;
 
-#if 1
-static Uint8 *buffer = 0;
-static int in_pos = 0;
-static int out_pos = 0;
 static std::atomic<bool> audio_buffer_fresh = false;
 static uint32_t last_ts = 0;
 
@@ -70,40 +66,27 @@ int64_t src_ch_layout = AV_CH_LAYOUT_MONO;
 int src_rate = 48000;
 enum AVSampleFormat src_sample_fmt = AV_SAMPLE_FMT_S16;
 int src_nb_channels = 0;
-uint8_t **src_data = NULL;  // 二级指针
+uint8_t **src_data = NULL;
 int src_linesize;
 int src_nb_samples = 480;
 
-// 输出参数
 int64_t dst_ch_layout = AV_CH_LAYOUT_MONO;
 int dst_rate = 48000;
 enum AVSampleFormat dst_sample_fmt = AV_SAMPLE_FMT_S16;
 int dst_nb_channels = 0;
-uint8_t **dst_data = NULL;  // 二级指针
+uint8_t **dst_data = NULL;
 int dst_linesize;
 int dst_nb_samples;
 int max_dst_nb_samples;
 
-// 输出文件
-const char *dst_filename = NULL;  // 保存输出的pcm到本地，然后播放验证
-FILE *dst_file;
-
 int dst_bufsize;
-
-// 重采样实例
 struct SwrContext *swr_ctx;
 
-double t;
 int ret;
-#endif
 
 int audio_len = 0;
-#define MAX_FRAME_SIZE 6 * 960
-#define CHANNELS 2
-unsigned char pcm_bytes[MAX_FRAME_SIZE * CHANNELS * 2];
 
 std::string window_title = "Remote Desk Client";
-
 std::string server_connection_status_str = "-";
 std::string client_connection_status_str = "-";
 std::string server_signal_status_str = "-";
@@ -408,15 +391,6 @@ void ClientConnectionStatus(ConnectionStatus status) {
 }
 
 int initResampler() {
-  // dst_filename = "res.pcm";
-
-  // dst_file = fopen(dst_filename, "wb");
-  // if (!dst_file) {
-  //   fprintf(stderr, "Could not open destination file %s\n", dst_filename);
-  //   exit(1);
-  // }
-
-  // 创建重采样器
   /* create resampler context */
   swr_ctx = swr_alloc();
   if (!swr_ctx) {
@@ -425,18 +399,15 @@ int initResampler() {
     return -1;
   }
 
-  // 设置重采样参数
   /* set options */
-  // 输入参数
   av_opt_set_int(swr_ctx, "in_channel_layout", src_ch_layout, 0);
   av_opt_set_int(swr_ctx, "in_sample_rate", src_rate, 0);
   av_opt_set_sample_fmt(swr_ctx, "in_sample_fmt", src_sample_fmt, 0);
-  // 输出参数
+
   av_opt_set_int(swr_ctx, "out_channel_layout", dst_ch_layout, 0);
   av_opt_set_int(swr_ctx, "out_sample_rate", dst_rate, 0);
   av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt", dst_sample_fmt, 0);
 
-  // 初始化重采样
   /* initialize the resampling context */
   if ((ret = swr_init(swr_ctx)) < 0) {
     fprintf(stderr, "Failed to initialize the resampling context\n");
@@ -444,9 +415,8 @@ int initResampler() {
   }
 
   /* allocate source and destination samples buffers */
-  // 计算出输入源的通道数量
   src_nb_channels = av_get_channel_layout_nb_channels(src_ch_layout);
-  // 给输入源分配内存空间
+
   ret = av_samples_alloc_array_and_samples(&src_data, &src_linesize,
                                            src_nb_channels, src_nb_samples,
                                            src_sample_fmt, 0);
@@ -455,13 +425,12 @@ int initResampler() {
     return -1;
   }
 
-  // 计算输出采样数量
   max_dst_nb_samples = dst_nb_samples =
       av_rescale_rnd(src_nb_samples, dst_rate, src_rate, AV_ROUND_UP);
 
   /* buffer is going to be directly written to a rawaudio file, no alignment */
   dst_nb_channels = av_get_channel_layout_nb_channels(dst_ch_layout);
-  // 分配输出缓存内存
+
   ret = av_samples_alloc_array_and_samples(&dst_data, &dst_linesize,
                                            dst_nb_channels, dst_nb_samples,
                                            dst_sample_fmt, 0);
