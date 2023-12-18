@@ -144,7 +144,7 @@ static const char *connect_label = "Connect";
 static char input_password[7] = "";
 static FILE *cd_cache_file = nullptr;
 static CDCache cd_cache;
-static char mac_addr[16];
+
 static bool is_create_connection = false;
 static bool done = false;
 
@@ -478,7 +478,8 @@ int initResampler() {
   }
 }
 
-std::string GetMac(char *mac_addr) {
+std::string GetMac() {
+  char mac_addr[16];
   int len = 0;
 #ifdef _WIN32
   IP_ADAPTER_INFO adapterInfo[16];
@@ -668,10 +669,14 @@ int main() {
   bool show_another_window = false;
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
+  std::string mac_addr_str = GetMac();
+
   std::thread rtc_thread(
       [](int screen_width, int screen_height) {
         std::string default_cfg_path = "../../../../config/config.ini";
         std::ifstream f(default_cfg_path.c_str());
+
+        std::string mac_addr_str = GetMac();
 
         Params server_params;
         server_params.cfg_path =
@@ -692,17 +697,16 @@ int main() {
         client_params.on_connection_status = ClientConnectionStatus;
 
         std::string transmission_id = "000001";
-        GetMac(mac_addr);
 
         peer_server = CreatePeer(&server_params);
         LOG_INFO("Create peer_server");
-        std::string server_user_id = "S-" + std::string(GetMac(mac_addr));
+        std::string server_user_id = "S-" + mac_addr_str;
         Init(peer_server, server_user_id.c_str());
         LOG_INFO("peer_server init finish");
 
         peer_client = CreatePeer(&client_params);
         LOG_INFO("Create peer_client");
-        std::string client_user_id = "C-" + std::string(GetMac(mac_addr));
+        std::string client_user_id = "C-" + mac_addr_str;
         Init(peer_client, client_user_id.c_str());
         LOG_INFO("peer_client init finish");
 
@@ -715,10 +719,12 @@ int main() {
             return;
           }
 
-          std::string user_id = "S-" + std::string(GetMac(mac_addr));
+          std::string user_id = "S-" + mac_addr_str;
           is_create_connection =
-              CreateConnection(peer_server, mac_addr, input_password) ? false
-                                                                      : true;
+              CreateConnection(peer_server, mac_addr_str.c_str(),
+                               input_password)
+                  ? false
+                  : true;
 
           nv12_buffer = new char[NV12_BUFFER_SIZE];
 
@@ -781,8 +787,10 @@ int main() {
         ImGui::Text(" LOCAL ID:");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(95);
-        ImGui::InputText("##local_id", mac_addr, IM_ARRAYSIZE(mac_addr),
-                         ImGuiInputTextFlags_CharsUppercase);
+        ImGui::InputText(
+            "##local_id", (char *)mac_addr_str.c_str(),
+            mac_addr_str.length() + 1,
+            ImGuiInputTextFlags_CharsUppercase | ImGuiInputTextFlags_ReadOnly);
 
         ImGui::Text(" PASSWORD:");
         ImGui::SameLine();
@@ -804,7 +812,7 @@ int main() {
             fclose(cd_cache_file);
           }
           LeaveConnection(peer_server);
-          CreateConnection(peer_server, mac_addr, input_password);
+          CreateConnection(peer_server, mac_addr_str.c_str(), input_password);
         }
 
         ImGui::Spacing();
@@ -815,15 +823,13 @@ int main() {
         {
           {
             static char remote_id[20] = "";
-            // if (strcmp(remote_id, "") == 0) {
-            //   strcpy(remote_id, GetMac(mac_addr).c_str());
-            // }
             ImGui::Text("REMOTE ID:");
             ImGui::SameLine();
             ImGui::SetNextItemWidth(95);
-            ImGui::InputTextWithHint("##remote_id", mac_addr, remote_id,
-                                     IM_ARRAYSIZE(remote_id),
-                                     ImGuiInputTextFlags_CharsNoBlank);
+            ImGui::InputTextWithHint("##remote_id", mac_addr_str.c_str(),
+                                     remote_id, IM_ARRAYSIZE(remote_id),
+                                     ImGuiInputTextFlags_CharsUppercase |
+                                         ImGuiInputTextFlags_CharsNoBlank);
 
             ImGui::Spacing();
 
@@ -840,7 +846,7 @@ int main() {
               int ret = -1;
               if ("ClientSignalConnected" == client_signal_status_str) {
                 if (strcmp(connect_label, "Connect") == 0 && !joined) {
-                  std::string user_id = "C-" + std::string(GetMac(mac_addr));
+                  std::string user_id = "C-" + mac_addr_str;
                   ret = JoinConnection(peer_client, remote_id, client_password);
                   if (0 == ret) {
                     joined = true;
