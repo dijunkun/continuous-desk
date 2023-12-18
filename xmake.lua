@@ -5,8 +5,8 @@ set_license("LGPL-3.0")
 add_rules("mode.release", "mode.debug")
 set_languages("c++17")
 
-set_policy("build.warning", true)
-set_warnings("all", "extra")
+-- set_policy("build.warning", true)
+-- set_warnings("all", "extra")
 
 add_defines("UNICODE")
 if is_mode("debug") then
@@ -53,6 +53,12 @@ target("log")
     add_headerfiles("src/log/log.h")
     add_includedirs("src/log", {public = true})
 
+target("common")
+    set_kind("object")
+    add_deps("log")
+    add_files("src/common/*.cpp")
+    add_includedirs("src/common", {public = true})
+
 target("screen_capturer")
     set_kind("object")
     add_deps("log")
@@ -85,7 +91,7 @@ target("device_controller")
 
 target("remote_desk")
     set_kind("binary")
-    add_deps("log", "screen_capturer", "device_controller", "projectx")
+    add_deps("log", "common", "screen_capturer", "device_controller", "projectx")
     add_files("src/gui/main.cpp")
 
     -- after_install(function (target)
