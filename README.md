@@ -34,7 +34,7 @@ Requirements:
 - [cmake](https://cmake.org/download/)
 - [vcpkg](https://vcpkg.io/en/getting-started)
 
-Following packages need to be installed on Linux£º
+Following packages need to be installed on Linux:
 
 ```
 sudo apt-get install -y nvidia-cuda-toolkit libxcb-randr0-dev libxcb-xtest0-dev libxcb-xinerama0-dev libxcb-shape0-dev libxcb-xkb-dev libxcb-xfixes0-dev libxcb-shm0-dev libxv-dev libasound2-dev libsndio-dev libasound2-dev libpulse-dev
