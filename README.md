@@ -5,7 +5,7 @@
 ----
 [Chinese](README_CN.md) / [English](README.md)
 
-![example](https://github.com/dijunkun/continuous-desk/assets/29698109/f3153e28-751e-477c-b4e3-ac2384d3370f)
+![sup-example](https://github.com/dijunkun/continuous-desk/assets/29698109/0a466cfa-776a-4339-91ec-cab7aeee5743)
 
 # Intro
 
@@ -17,24 +17,24 @@ Continuous Desk is an experimental application of [Projectx](https://github.com/
 
 Enter the remote desktop ID in the 'REMOTE ID' field on the menu bar, and click 'Connect' button to initiate the remote connection.
 
-![usage1](https://github.com/dijunkun/continuous-desk/assets/29698109/80099485-f2db-4f09-9fb2-e811d87265dc)
+![usage1](https://github.com/dijunkun/continuous-desk/assets/29698109/2ad59e6d-bdba-46d0-90cf-cbc9c06c2278)
 
 If the remote desktop is set with a connection password, the local end needs to enter the correct password to initiate the remote connection. If the password is incorrect, an "Incorrect password" alert will appear in the status bar.
 
-![incorrect password](https://github.com/dijunkun/continuous-desk/assets/29698109/0b16d21a-baa6-49c1-9d87-5e80978dd345)
+![incorrect password](https://github.com/dijunkun/continuous-desk/assets/29698109/cb05501c-ec4e-4adf-952d-7a55ef770a97)
 
 After connection successfully established, the status bar will display the message "ClientConnected."
 
-![success](https://github.com/dijunkun/continuous-desk/assets/29698109/9c4f6604-2b1b-47b6-9c73-21c5026d1f26)
+![success](https://github.com/dijunkun/continuous-desk/assets/29698109/0cca21f7-48fe-44a5-b83d-eafeb8a81eb1)
 
 ## How to build
 
-Requirements£º
+Requirements:
 - [xmake](https://xmake.io/#/guide/installation)
 - [cmake](https://cmake.org/download/)
 - [vcpkg](https://vcpkg.io/en/getting-started)
 
-Following packages need to be installed on Linux£º
+Following packages need to be installed on LinuxÂ£Âº
 
 ```
 sudo apt-get install -y nvidia-cuda-toolkit libxcb-randr0-dev libxcb-xtest0-dev libxcb-xinerama0-dev libxcb-shape0-dev libxcb-xkb-dev libxcb-xfixes0-dev libxcb-shm0-dev libxv-dev libasound2-dev libsndio-dev libasound2-dev libpulse-dev
