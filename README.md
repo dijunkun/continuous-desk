@@ -6,7 +6,7 @@ Make works continuous
 
 ----
 
-![Alt text](example.PNG)
+![example](https://github.com/dijunkun/continuous-desk/assets/29698109/f3153e28-751e-477c-b4e3-ac2384d3370f)
 
 ----
 
