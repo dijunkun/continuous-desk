@@ -5,7 +5,7 @@
 ----
 [English](README.md) / [中文](README_CN.md)
 
-![example](https://github.com/dijunkun/continuous-desk/assets/29698109/f3153e28-751e-477c-b4e3-ac2384d3370f)
+![sup-example](https://github.com/dijunkun/continuous-desk/assets/29698109/0a466cfa-776a-4339-91ec-cab7aeee5743)
 
 ## 简介
 
@@ -18,15 +18,15 @@ Continuous Desk 是 [Projectx](https://github.com/dijunkun/projectx) 实时音视频传
 
 在菜单栏“REMOTE ID”处输入远端桌面的ID，点击“Connect”即可发起远程连接。
 
-![usage1](https://github.com/dijunkun/continuous-desk/assets/29698109/80099485-f2db-4f09-9fb2-e811d87265dc)
+![usage1](https://github.com/dijunkun/continuous-desk/assets/29698109/2ad59e6d-bdba-46d0-90cf-cbc9c06c2278)
 
 如果远端桌面设置了连接密码，则本端需填写正确的连接密码才能成功发起远程连接。密码错误时，状态栏会出现“Incorrect password”告警提示。
 
-![incorrect password](https://github.com/dijunkun/continuous-desk/assets/29698109/0b16d21a-baa6-49c1-9d87-5e80978dd345)
+![incorrect password](https://github.com/dijunkun/continuous-desk/assets/29698109/cb05501c-ec4e-4adf-952d-7a55ef770a97)
 
 连接成功建立后，状态栏会有“ClientConnected”相关字样。
 
-![success](https://github.com/dijunkun/continuous-desk/assets/29698109/9c4f6604-2b1b-47b6-9c73-21c5026d1f26)
+![success](https://github.com/dijunkun/continuous-desk/assets/29698109/0cca21f7-48fe-44a5-b83d-eafeb8a81eb1)
 
 ## 编译
 
