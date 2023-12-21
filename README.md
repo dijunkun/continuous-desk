@@ -5,7 +5,7 @@
 ----
 [Chinese](README_CN.md) / [English](README.md)
 
-![example_small](https://github.com/dijunkun/continuous-desk/assets/29698109/7f82b985-8444-4dda-b287-e18b6353972c)
+![example_small](https://github.com/dijunkun/continuous-desk/assets/29698109/bd42040e-0c7f-4d54-aa51-f1292e55f2c1)
 
 # Intro
 
