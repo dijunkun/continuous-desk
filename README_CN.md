@@ -1,47 +1,47 @@
 # Continuous Desk
 
-#### ²»Ö¹Ô¶³Ì×ÀÃæ
+#### ä¸æ­¢è¿œç¨‹æ¡Œé¢
 
 ----
-[English](README.md) / [ÖĞÎÄ](README_CN.md)
+[English](README.md) / [ä¸­æ–‡](README_CN.md)
 
-![sup-example](https://github.com/dijunkun/continuous-desk/assets/29698109/0a466cfa-776a-4339-91ec-cab7aeee5743)
+![sup_example](https://github.com/dijunkun/continuous-desk/assets/29698109/46536bc8-3ddd-438d-bf52-dccf143f1c20)
 
-## ¼ò½é
+## ç®€ä»‹
 
-Continuous Desk ÊÇÒ»¸öÇáÁ¿¼¶µÄ¿çÆ½Ì¨Ô¶³Ì×ÀÃæÈí¼ş¡£ËüÔÊĞí¶à¸öÓÃ»§ÔÚÍ¬Ò»Ê±¼äÔ¶³Ì²Ù¿ØÍ¬Ò»Ì¨µçÄÔ¡£³ı×ÀÃæÍ¼Ïñ´«ÊäÍâ£¬Ëü»¹Ö§³Ö¶Ëµ½¶ËµÄÓïÒô´«Êä£¬ÔÚÔ¶³Ì×ÀÃæ»ù´¡ÉÏÌá¹©¶îÍâµÄĞ­×÷ÄÜÁ¦¡£
+Continuous Desk æ˜¯ä¸€ä¸ªè½»é‡çº§çš„è·¨å¹³å°è¿œç¨‹æ¡Œé¢è½¯ä»¶ã€‚å®ƒå…è®¸å¤šä¸ªç”¨æˆ·åœ¨åŒä¸€æ—¶é—´è¿œç¨‹æ“æ§åŒä¸€å°ç”µè„‘ã€‚é™¤æ¡Œé¢å›¾åƒä¼ è¾“å¤–ï¼Œå®ƒè¿˜æ”¯æŒç«¯åˆ°ç«¯çš„è¯­éŸ³ä¼ è¾“ï¼Œåœ¨è¿œç¨‹æ¡Œé¢åŸºç¡€ä¸Šæä¾›é¢å¤–çš„åä½œèƒ½åŠ›ã€‚
 
-Continuous Desk ÊÇ [Projectx](https://github.com/dijunkun/projectx) ÊµÊ±ÒôÊÓÆµ´«Êä¿âµÄÊµÑéĞÔÓ¦ÓÃ¡£Projectx ÊÇÒ»¸öÇáÁ¿¼¶µÄ¿çÆ½Ì¨ÊµÊ±ÒôÊÓÆµ´«Êä¿â¡£Ëü¾ßÓĞÍøÂçÍ¸´«£¨[RFC5245](https://datatracker.ietf.org/doc/html/rfc5245)£©£¬ÊÓÆµÈíÓ²±à½âÂë£¨H264£©£¬ÒôÆµ±à½âÂë£¨[Opus](https://github.com/xiph/opus)£©£¬ĞÅÁî½»»¥£¬ÍøÂçÓµÈû¿ØÖÆ£¨[TCP over UDP](https://libnice.freedesktop.org/)£©µÈ»ù´¡ÄÜÁ¦¡£
+Continuous Desk æ˜¯ [Projectx](https://github.com/dijunkun/projectx) å®æ—¶éŸ³è§†é¢‘ä¼ è¾“åº“çš„å®éªŒæ€§åº”ç”¨ã€‚Projectx æ˜¯ä¸€ä¸ªè½»é‡çº§çš„è·¨å¹³å°å®æ—¶éŸ³è§†é¢‘ä¼ è¾“åº“ã€‚å®ƒå…·æœ‰ç½‘ç»œé€ä¼ ï¼ˆ[RFC5245](https://datatracker.ietf.org/doc/html/rfc5245)ï¼‰ï¼Œè§†é¢‘è½¯ç¡¬ç¼–è§£ç ï¼ˆH264ï¼‰ï¼ŒéŸ³é¢‘ç¼–è§£ç ï¼ˆ[Opus](https://github.com/xiph/opus)ï¼‰ï¼Œä¿¡ä»¤äº¤äº’ï¼Œç½‘ç»œæ‹¥å¡æ§åˆ¶ï¼ˆ[TCP over UDP](https://libnice.freedesktop.org/)ï¼‰ç­‰åŸºç¡€èƒ½åŠ›ã€‚
 
 
-## Ê¹ÓÃ
+## ä½¿ç”¨
 
-ÔÚ²Ëµ¥À¸¡°REMOTE ID¡±´¦ÊäÈëÔ¶¶Ë×ÀÃæµÄID£¬µã»÷¡°Connect¡±¼´¿É·¢ÆğÔ¶³ÌÁ¬½Ó¡£
+åœ¨èœå•æ â€œREMOTE IDâ€å¤„è¾“å…¥è¿œç«¯æ¡Œé¢çš„IDï¼Œç‚¹å‡»â€œConnectâ€å³å¯å‘èµ·è¿œç¨‹è¿æ¥ã€‚
 
 ![usage1](https://github.com/dijunkun/continuous-desk/assets/29698109/2ad59e6d-bdba-46d0-90cf-cbc9c06c2278)
 
-Èç¹ûÔ¶¶Ë×ÀÃæÉèÖÃÁËÁ¬½ÓÃÜÂë£¬Ôò±¾¶ËĞèÌîĞ´ÕıÈ·µÄÁ¬½ÓÃÜÂë²ÅÄÜ³É¹¦·¢ÆğÔ¶³ÌÁ¬½Ó¡£ÃÜÂë´íÎóÊ±£¬×´Ì¬À¸»á³öÏÖ¡°Incorrect password¡±¸æ¾¯ÌáÊ¾¡£
+å¦‚æœè¿œç«¯æ¡Œé¢è®¾ç½®äº†è¿æ¥å¯†ç ï¼Œåˆ™æœ¬ç«¯éœ€å¡«å†™æ­£ç¡®çš„è¿æ¥å¯†ç æ‰èƒ½æˆåŠŸå‘èµ·è¿œç¨‹è¿æ¥ã€‚å¯†ç é”™è¯¯æ—¶ï¼ŒçŠ¶æ€æ ä¼šå‡ºç°â€œIncorrect passwordâ€å‘Šè­¦æç¤ºã€‚
 
 ![incorrect password](https://github.com/dijunkun/continuous-desk/assets/29698109/cb05501c-ec4e-4adf-952d-7a55ef770a97)
 
-Á¬½Ó³É¹¦½¨Á¢ºó£¬×´Ì¬À¸»áÓĞ¡°ClientConnected¡±Ïà¹Ø×ÖÑù¡£
+è¿æ¥æˆåŠŸå»ºç«‹åï¼ŒçŠ¶æ€æ ä¼šæœ‰â€œClientConnectedâ€ç›¸å…³å­—æ ·ã€‚
 
 ![success](https://github.com/dijunkun/continuous-desk/assets/29698109/0cca21f7-48fe-44a5-b83d-eafeb8a81eb1)
 
-## ±àÒë
+## ç¼–è¯‘
 
-ÒÀÀµ£º
+ä¾èµ–ï¼š
 - [xmake](https://xmake.io/#/guide/installation)
 - [cmake](https://cmake.org/download/)
 - [vcpkg](https://vcpkg.io/en/getting-started)
 
-Linux»·¾³ÏÂĞè°²×°ÒÔÏÂ°ü£º
+Linuxç¯å¢ƒä¸‹éœ€å®‰è£…ä»¥ä¸‹åŒ…ï¼š
 
 ```
 sudo apt-get install -y nvidia-cuda-toolkit libxcb-randr0-dev libxcb-xtest0-dev libxcb-xinerama0-dev libxcb-shape0-dev libxcb-xkb-dev libxcb-xfixes0-dev libxcb-shm0-dev libxv-dev libasound2-dev libsndio-dev libasound2-dev libpulse-dev
 ```
 
-±àÒëÃüÁî
+ç¼–è¯‘å‘½ä»¤
 ```
 git clone https://github.com/dijunkun/continuous-desk
 
@@ -53,15 +53,15 @@ git submodule update
 
 xmake b remote_desk
 ```
-ÔËĞĞ
+è¿è¡Œ
 ```
 # Windows/MacOS
 xmake r remote_desk
 
-# LinuxÏÂĞèÊ¹ÓÃrootÈ¨ÏŞÔËĞĞ
+# Linuxä¸‹éœ€ä½¿ç”¨rootæƒé™è¿è¡Œ
 ./remote_desk
 ```
 
-## Ğí¿ÉÖ¤
+## è®¸å¯è¯
 
-Continuous Desk Ê¹ÓÃ MIT Ğí¿ÉÖ¤£¬ÆäÖĞÊ¹ÓÃµ½µÄµÚÈı·½¿â¸ù¾İ×ÔÉíĞí¿ÉÖ¤½øĞĞ·Ö·¢¡£
+Continuous Desk ä½¿ç”¨ MIT è®¸å¯è¯ï¼Œå…¶ä¸­ä½¿ç”¨åˆ°çš„ç¬¬ä¸‰æ–¹åº“æ ¹æ®è‡ªèº«è®¸å¯è¯è¿›è¡Œåˆ†å‘ã€‚
