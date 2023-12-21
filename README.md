@@ -3,9 +3,9 @@
 #### More than remote desktop
 
 ----
-[Chinese](README_CN.md) / [English](README.md)
+[中文](README_CN.md) / [English](README.md)
 
-![example_small](https://github.com/dijunkun/continuous-desk/assets/29698109/bd42040e-0c7f-4d54-aa51-f1292e55f2c1)
+![sup_example](https://github.com/dijunkun/continuous-desk/assets/29698109/46536bc8-3ddd-438d-bf52-dccf143f1c20)
 
 # Intro
 
@@ -40,7 +40,7 @@ Following packages need to be installed on Linux:
 sudo apt-get install -y nvidia-cuda-toolkit libxcb-randr0-dev libxcb-xtest0-dev libxcb-xinerama0-dev libxcb-shape0-dev libxcb-xkb-dev libxcb-xfixes0-dev libxcb-shm0-dev libxv-dev libasound2-dev libsndio-dev libasound2-dev libpulse-dev
 ```
 
-Commands
+Commands:
 ```
 git clone https://github.com/dijunkun/continuous-desk
 
@@ -52,7 +52,7 @@ git submodule update
 
 xmake b remote_desk
 ```
-Run
+Run:
 ```
 # Windows/MacOS
 xmake r remote_desk
