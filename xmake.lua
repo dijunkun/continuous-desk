@@ -3,7 +3,7 @@ set_version("0.0.1")
 set_license("LGPL-3.0")
 
 add_rules("mode.release", "mode.debug")
-set_languages("c++17")
+set_languages("c++14")
 
 -- set_policy("build.warning", true)
 -- set_warnings("all", "extra")

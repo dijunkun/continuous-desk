@@ -59,7 +59,7 @@ uint32_t start_time, end_time, elapsed_time;
 uint32_t frame_count = 0;
 int fps = 0;
 
-static std::atomic<bool> audio_buffer_fresh = false;
+static std::atomic<bool> audio_buffer_fresh{false};
 static uint32_t last_ts = 0;
 
 int64_t src_ch_layout = AV_CH_LAYOUT_MONO;
@@ -92,19 +92,19 @@ std::string client_connection_status_str = "-";
 std::string server_signal_status_str = "-";
 std::string client_signal_status_str = "-";
 
-std::atomic<ConnectionStatus> server_connection_status =
-    ConnectionStatus::Closed;
-std::atomic<ConnectionStatus> client_connection_status =
-    ConnectionStatus::Closed;
-std::atomic<SignalStatus> server_signal_status = SignalStatus::SignalClosed;
-std::atomic<SignalStatus> client_signal_status = SignalStatus::SignalClosed;
+std::atomic<ConnectionStatus> server_connection_status{
+    ConnectionStatus::Closed};
+std::atomic<ConnectionStatus> client_connection_status{
+    ConnectionStatus::Closed};
+std::atomic<SignalStatus> server_signal_status{SignalStatus::SignalClosed};
+std::atomic<SignalStatus> client_signal_status{SignalStatus::SignalClosed};
 
 // Refresh Event
 #define REFRESH_EVENT (SDL_USEREVENT + 1)
 #define QUIT_EVENT (SDL_USEREVENT + 2)
 
 typedef struct {
-  char password[16];
+  char password[7];
 } CDCache;
 
 int thread_exit = 0;
