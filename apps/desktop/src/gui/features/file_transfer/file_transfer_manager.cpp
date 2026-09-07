@@ -20,6 +20,16 @@ namespace crossdesk {
 
 FileTransferManager::FileTransferManager(GuiRuntime &owner) : owner_(owner) {}
 
+FileTransferManager::~FileTransferManager() {
+  std::vector<std::future<void>> workers;
+  {
+    std::lock_guard lock(workers_mutex_);
+    stopping_ = true;
+    workers.swap(workers_);
+  }
+  for (auto& worker : workers) worker.wait();
+}
+
 FileTransferManager::FileTransferState &FileTransferManager::global_state() {
   return global_state_;
 }
@@ -92,8 +102,16 @@ void FileTransferManager::Start(
     std::shared_ptr<RemoteSession> props,
     const std::filesystem::path &file_path, const std::string &file_label,
     const std::string &remote_id) {
+  if (props && props->closing_) return;
   const bool is_global = !props;
-  PeerPtr *peer = is_global ? owner_.peer_ : props->peer_;
+  PeerPtr* peer = nullptr;
+  std::shared_ptr<PeerEventHandler> peer_events;
+  {
+    std::shared_lock lock(owner_.remote_sessions_mutex_);
+    if (props && props->closing_) return;
+    peer = is_global ? owner_.peer_ : props->peer_;
+    peer_events = is_global ? owner_.peer_events_ : props->peer_events_;
+  }
   if (!peer) {
     LOG_ERROR("StartFileTransfer: invalid peer");
     return;
@@ -108,7 +126,14 @@ void FileTransferManager::Start(
   }
 
   const auto props_weak = std::weak_ptr<RemoteSession>(props);
-  std::thread([this, peer, file_path, file_label, props_weak, remote_id,
+  std::lock_guard workers_lock(workers_mutex_);
+  if (stopping_) return;
+  // Reap finished senders without blocking the UI.
+  std::erase_if(workers_, [](auto& worker) {
+    return worker.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+  });
+  workers_.push_back(std::async(std::launch::async,
+      [this, peer, peer_events, file_path, file_label, props_weak, remote_id,
                is_global]() {
     auto props_locked = props_weak.lock();
     FileTransferState *state = nullptr;
@@ -166,7 +191,11 @@ void FileTransferManager::Start(
 
     const int ret = sender.SendFile(
         file_path, file_path.filename().string(),
-        [peer, file_label, remote_id](const char *buffer, size_t size) {
+        [peer, peer_events, file_label, remote_id, props_locked](const char *buffer, size_t size) {
+          // Close drains each in-flight send before detaching the peer.
+          if (props_locked && props_locked->closing_) return -1;
+          auto callback = peer_events->EnterCallback();
+          if (!callback) return -1;
           if (remote_id.empty()) {
             return SendReliableDataFrame(peer, buffer, size,
                                          file_label.c_str());
@@ -200,12 +229,13 @@ void FileTransferManager::Start(
     }
     LOG_ERROR("FileSender::SendFile failed for [{}], ret={}",
               file_path.string().c_str(), ret);
-    ProcessQueue(props_locked);
-  }).detach();
+    if (peer_events->IsActive()) ProcessQueue(props_locked);
+  }));
 }
 
 void FileTransferManager::ProcessQueue(
     std::shared_ptr<RemoteSession> props) {
+  if (props && props->closing_) return;
   FileTransferState &state = state_for(props);
   if (state.file_sending_.load()) {
     return;

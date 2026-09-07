@@ -1738,7 +1738,7 @@ void GuiApplication::BindServerCallbacks() {
   });
   server->on_disconnect_controller([this] {
     if (peer_ && !selected_server_remote_id_.empty()) {
-      LeaveConnection(peer_, selected_server_remote_id_.c_str());
+      CloseServerController(selected_server_remote_id_);
     }
   });
 }
@@ -1748,6 +1748,7 @@ void GuiApplication::Tick() {
     slint::quit_event_loop();
     return;
   }
+  HandleSessionCleanup();
   HandlePasswordChangeResult();
   HandleCredentialRecovery();
   if (!peer_) {
@@ -2008,8 +2009,7 @@ void GuiApplication::HandlePasswordChangeResult() {
     }
     show_offline_warning_window_ = true;
     if (uncertain && peer_) {
-      LeaveConnection(peer_, client_id_);
-      DestroyPeer(&peer_);
+      CloseConnectionPeer();
     }
     return;
   }
@@ -2022,8 +2022,7 @@ void GuiApplication::HandlePasswordChangeResult() {
 
   LOG_INFO("Password changed successfully for [{}]", client_id_);
   if (peer_) {
-    LeaveConnection(peer_, client_id_);
-    DestroyPeer(&peer_);
+    CloseConnectionPeer();
   }
 }
 
@@ -2047,7 +2046,7 @@ void GuiApplication::HandleCredentialRecovery() {
   if (retry_active) {
     LOG_INFO("Pending credential was not accepted; retrying active credential");
     if (peer_) {
-      DestroyPeer(&peer_);
+      CloseConnectionPeer();
     }
     return;
   }
@@ -3083,9 +3082,6 @@ void GuiApplication::CloseStreamTab(const std::string& remote_id) {
   }
   keyboard_.ReleaseRemotePressedKeys(remote_id, "stream_tab_closed");
   CloseRemoteSession(props);
-  WaitForThumbnailSaveTasks();
-  reload_recent_connections_ = true;
-  recent_connection_image_save_time_ = 0;
   ResetRemoteSessionResources(props);
   {
     std::unique_lock lock(remote_sessions_mutex_);
@@ -3290,7 +3286,7 @@ void GuiApplication::Cleanup() {
   devices_.DestroyDevices();
   devices_.DestroyFactories();
   CloseAllRemoteSessions();
-  WaitForThumbnailSaveTasks();
+  WaitForSessionCleanup();
   devices_.DestroyAudioOutput();
   if (ui_->stream) {
 #if defined(__APPLE__)

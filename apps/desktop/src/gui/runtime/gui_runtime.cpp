@@ -19,11 +19,17 @@ namespace crossdesk {
 
 GuiRuntime::GuiRuntime()
     : clipboard_(*this), devices_(*this), transfers_(*this), settings_(*this),
-      keyboard_(*this), peer_events_(*this) {}
+      keyboard_(*this) {}
 
-GuiRuntime::~GuiRuntime() = default;
+GuiRuntime::~GuiRuntime() { WaitForSessionCleanup(); }
 
 int GuiRuntime::CreateConnectionPeer() {
+  // Tick retries after the old peer's leave notification and socket shutdown.
+  if (connection_peer_cleanup_.valid()) return 0;
+  {
+    std::unique_lock lock(remote_sessions_mutex_);
+    peer_events_ = std::make_shared<PeerEventHandler>(*this);
+  }
   params_.use_cfg_file = false;
 
   std::string signal_server_ip;
@@ -189,14 +195,17 @@ int GuiRuntime::CreateConnectionPeer() {
   params_.on_connection_status = PeerEventHandler::OnConnectionStatus;
   params_.on_net_status_report = PeerEventHandler::OnNetStatusReport;
 
-  params_.user_data = &peer_events_;
+  params_.user_data = peer_events_.get();
 
   // The previous peer may have left a terminal status behind. Reset it before
   // Init() starts emitting callbacks for the newly selected server.
   signal_connected_ = false;
   signal_status_ = SignalStatus::SignalConnecting;
 
-  peer_ = CreatePeer(&params_);
+  {
+    std::unique_lock lock(remote_sessions_mutex_);
+    peer_ = CreatePeer(&params_);
+  }
   if (peer_) {
     LOG_INFO("Create peer instance [{}] successful", client_id_);
     Init(peer_);
@@ -240,7 +249,7 @@ void GuiRuntime::UpdateLabels() {
 
 
 void GuiRuntime::HandleRecentConnections() {
-  if (reload_recent_connections_ && thumbnail_) {
+  if (session_cleanup_tasks_.empty() && reload_recent_connections_ && thumbnail_) {
     uint32_t now_time = SDL_GetTicks();
     if (now_time - recent_connection_image_save_time_ >= 50) {
       int ret = thumbnail_->LoadThumbnail(recent_connections_,

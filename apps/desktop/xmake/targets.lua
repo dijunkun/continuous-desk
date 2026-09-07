@@ -34,6 +34,7 @@ function setup_targets()
         set_kind("object")
         add_deps("rd_log", "crossdesk_wire")
         add_packages("libyuv")
+        add_packages("concurrentqueue", {public = true})
         add_files("apps/desktop/src/common/*.cpp")
         remove_files("apps/desktop/src/common/rounded_corner_button.cpp")
         if is_os("windows") then

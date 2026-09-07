@@ -4,6 +4,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <future>
+#include <mutex>
+#include <vector>
 #include <memory>
 #include <shared_mutex>
 #include <string>
@@ -21,6 +24,7 @@ public:
   using RemoteSession = gui_detail::RemoteSession;
 
   explicit FileTransferManager(GuiRuntime &owner);
+  ~FileTransferManager();
 
   FileTransferState &global_state();
   FileTransferState &
@@ -40,6 +44,9 @@ private:
   void ProcessQueue(std::shared_ptr<RemoteSession> props);
   void Unregister(uint32_t file_id, bool per_peer);
 
+  std::mutex workers_mutex_;
+  std::vector<std::future<void>> workers_;
+  bool stopping_ = false;
   GuiRuntime &owner_;
   FileTransferState global_state_;
   std::unordered_map<uint32_t, std::weak_ptr<RemoteSession>>

@@ -22,9 +22,11 @@
 #include <stream_names.h>
 
 #include "config_center.h"
+#include "common/task_queue_lock_free.h"
 #include "path_manager.h"
 #include "runtime/device_presence_cache.h"
 #include "runtime/remote_session.h"
+#include "runtime/session_lifecycle.h"
 #include "thumbnail.h"
 
 namespace crossdesk::gui_detail {
@@ -184,8 +186,15 @@ struct ConnectionState {
       std::unordered_map<std::string, RemoteSessionPtr>;
   RemoteSessionMap remote_sessions_;
   std::shared_mutex remote_sessions_mutex_;
-  std::vector<std::thread> thumbnail_save_threads_;
-  std::mutex thumbnail_save_threads_mutex_;
+  TaskQueueLockFree session_cleanup_queue_;
+  std::unordered_map<std::string, std::future<void>> session_cleanup_tasks_;
+  std::future<void> connection_peer_cleanup_;
+  std::unordered_map<std::string, std::future<void>> controller_cleanup_tasks_;
+  struct PendingReconnect {
+    std::string password;
+    bool remember_password = false;
+  };
+  std::unordered_map<std::string, PendingReconnect> pending_reconnects_;
 
   std::shared_mutex connection_status_mutex_;
   std::unordered_map<std::string, ConnectionStatus> connection_status_;

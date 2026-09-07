@@ -79,6 +79,9 @@ void PeerEventHandler::OnReceiveDataBuffer(
     const char *data, size_t size, const char *user_id, size_t user_id_size,
     const char *src_id, size_t src_id_size, void *user_data) {
   auto *handler = static_cast<PeerEventHandler *>(user_data);
+  if (!handler) return;
+  auto callback = handler->EnterCallback();
+  if (!callback) return;
   GuiRuntime *runtime = handler ? &handler->owner_ : nullptr;
   if (!runtime) {
     return;
@@ -145,9 +148,8 @@ void PeerEventHandler::OnReceiveDataBuffer(
 
   std::string remote_id(user_id, user_id_size);
   if (remote_action.type == ControlType::service_status) {
-    auto props_it = runtime->remote_sessions_.find(remote_id);
-    if (props_it != runtime->remote_sessions_.end()) {
-      runtime->ApplyRemoteServiceStatus(*props_it->second, remote_action.ss);
+    if (auto props = runtime->FindRemoteSession(remote_id)) {
+      runtime->ApplyRemoteServiceStatus(*props, remote_action.ss);
     }
     return;
   }

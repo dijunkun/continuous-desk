@@ -6,6 +6,7 @@
 #include <shared_mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <display_stream_id.h>
@@ -220,6 +221,11 @@ int GuiRuntime::RequestSingleDevicePresence(const std::string& remote_id,
 }
 
 void GuiRuntime::CloseRemoteSession(std::shared_ptr<RemoteSession> props) {
+  if (!props || props->closing_.exchange(true)) return;
+  if (props->peer_events_) props->peer_events_->Deactivate();
+  props->connection_established_ = false;
+  props->streaming_ = false;
+  props->connection_status_.store(ConnectionStatus::Closed);
   std::shared_ptr<std::vector<unsigned char>> frame_snapshot;
   int video_width = 0;
   int video_height = 0;
@@ -245,85 +251,160 @@ void GuiRuntime::CloseRemoteSession(std::shared_ptr<RemoteSession> props) {
     }
   }
 
-  if (frame_snapshot && !frame_snapshot->empty() && video_width > 0 &&
-      video_height > 0) {
-    std::vector<unsigned char> buffer_copy(*frame_snapshot);
-    std::string remote_id = props->remote_id_;
-    std::string remote_host_name = props->remote_host_name_;
-    std::string password =
-        props->remember_password_ ? props->remote_password_ : "";
-
-    std::thread save_thread([buffer_copy, video_width, video_height, remote_id,
-                             remote_host_name, password,
-                             thumbnail = thumbnail_]() {
-      thumbnail->SaveToThumbnail((char*)buffer_copy.data(), video_width,
-                                 video_height, remote_id, remote_host_name,
-                                 password);
-    });
-
-    {
-      std::lock_guard<std::mutex> lock(thumbnail_save_threads_mutex_);
-      thumbnail_save_threads_.emplace_back(std::move(save_thread));
-    }
-  }
-
   if (native_renderer) {
     native_renderer->DiscardStream(props->remote_id_);
     video_frame_dirty_.store(true, std::memory_order_release);
   }
 
-  if (props->peer_) {
-    LOG_INFO("[{}] Leave connection [{}]", props->local_id_, props->remote_id_);
-    LeaveConnection(props->peer_, props->remote_id_.c_str());
-    LOG_INFO("Destroy peer [{}]", props->local_id_);
-    DestroyPeer(&props->peer_);
+  PeerPtr* peer = nullptr;
+  {
+    // Audio/clipboard senders hold a shared map lock while using this pointer.
+    std::unique_lock lock(remote_sessions_mutex_);
+    peer = std::exchange(props->peer_, nullptr);
   }
+  const auto queued_at = std::chrono::steady_clock::now();
+  session_cleanup_tasks_[props->remote_id_] = session_cleanup_queue_.PostTask(
+      [props, peer, frame_snapshot, video_width, video_height,
+       thumbnail = thumbnail_, queued_at]() mutable {
+        if (peer) {
+          LOG_INFO("[{}] Background leave connection [{}]", props->local_id_,
+                   props->remote_id_);
+          LeaveConnection(peer, props->remote_id_.c_str());
+          DestroyPeer(&peer);
+        }
+        if (thumbnail && frame_snapshot && !frame_snapshot->empty() &&
+            video_width > 0 && video_height > 0) {
+          thumbnail->SaveToThumbnail(
+              reinterpret_cast<char*>(frame_snapshot->data()), video_width,
+              video_height, props->remote_id_, props->remote_host_name_,
+              props->remember_password_ ? props->remote_password_ : "");
+        }
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - queued_at).count();
+        LOG_INFO("[{}] Session cleanup completed in {} ms", props->remote_id_,
+                 elapsed);
+      });
+}
+
+void GuiRuntime::CloseServerController(const std::string& remote_id) {
+  if (!peer_ || remote_id.empty() || controller_cleanup_tasks_.count(remote_id))
+    return;
+  controller_cleanup_tasks_[remote_id] = session_cleanup_queue_.PostTask(
+      [peer = peer_, remote_id] { LeaveConnection(peer, remote_id.c_str()); });
+}
+
+void GuiRuntime::CloseConnectionPeer() {
+  if (!peer_) return;
+  peer_events_->Deactivate();
+  std::vector<std::string> controllers;
+  {
+    std::shared_lock lock(connection_status_mutex_);
+    for (const auto& [id, status] : connection_status_) controllers.push_back(id);
+  }
+  for (const auto& id : controllers)
+    HandleServerControllerDisconnected(id, "peer_closed");
+  devices_.StopMouseController();
+  devices_.StopScreenCapturer();
+  devices_.StopSpeakerCapturer();
+  devices_.StopKeyboardCapturer();
+  signal_connected_ = false;
+  signal_status_ = SignalStatus::SignalClosed;
+  PeerPtr* peer;
+  {
+    std::unique_lock lock(remote_sessions_mutex_);
+    peer = std::exchange(peer_, nullptr);
+  }
+  // The same serial queue also owns outstanding controller disconnects, so
+  // these finish before the shared peer is destroyed.
+  connection_peer_cleanup_ = session_cleanup_queue_.PostTask(
+      [peer, handler = peer_events_, id = std::string(client_id_)]() mutable {
+        LOG_INFO("[{}] Background connection peer cleanup", id);
+        LeaveConnection(peer, id.c_str());
+        DestroyPeer(&peer);
+      });
 }
 
 void GuiRuntime::CloseAllRemoteSessions() {
-  if (peer_) {
-    LOG_INFO("[{}] Leave connection [{}]", client_id_, client_id_);
-    LeaveConnection(peer_, client_id_);
-    is_client_mode_ = false;
-    devices_.StopMouseController();
-    devices_.StopScreenCapturer();
-    devices_.StopSpeakerCapturer();
-    devices_.StopKeyboardCapturer();
-    LOG_INFO("Destroy peer [{}]", client_id_);
-    DestroyPeer(&peer_);
-  }
-
+  CloseConnectionPeer();
+  is_client_mode_ = false;
+  pending_reconnects_.clear();
+  std::vector<std::shared_ptr<RemoteSession>> sessions;
   {
-    // std::shared_lock lock(remote_sessions_mutex_);
-    for (auto& it : remote_sessions_) {
-      auto props = it.second;
-      CloseRemoteSession(props);
-    }
+    std::shared_lock lock(remote_sessions_mutex_);
+    for (const auto& [id, props] : remote_sessions_) sessions.push_back(props);
   }
-
+  for (const auto& props : sessions) CloseRemoteSession(props);
   {
-    // std::unique_lock lock(remote_sessions_mutex_);
+    std::unique_lock lock(remote_sessions_mutex_);
     remote_sessions_.clear();
   }
 }
 
-void GuiRuntime::WaitForThumbnailSaveTasks() {
-  std::vector<std::thread> threads_to_join;
-
-  {
-    std::lock_guard<std::mutex> lock(thumbnail_save_threads_mutex_);
-    threads_to_join.swap(thumbnail_save_threads_);
+void GuiRuntime::HandleSessionCleanup() {
+  auto completed = [](std::future<void>& task) {
+    if (!task.valid() || task.wait_for(std::chrono::seconds(0)) !=
+                             std::future_status::ready) return false;
+    try {
+      task.get();
+    } catch (const std::exception& error) {
+      LOG_ERROR("Connection cleanup failed: {}", error.what());
+    }
+    return true;
+  };
+  completed(connection_peer_cleanup_);
+  for (auto it = controller_cleanup_tasks_.begin();
+       it != controller_cleanup_tasks_.end();) {
+    if (completed(it->second)) it = controller_cleanup_tasks_.erase(it);
+    else ++it;
   }
-
-  if (threads_to_join.empty()) {
-    return;
+  std::vector<std::pair<std::string, PendingReconnect>> reconnects;
+  for (auto it = session_cleanup_tasks_.begin();
+       it != session_cleanup_tasks_.end();) {
+    if (it->second.wait_for(std::chrono::seconds(0)) !=
+        std::future_status::ready) {
+      ++it;
+      continue;
+    }
+    try {
+      it->second.get();
+    } catch (const std::exception& error) {
+      LOG_ERROR("[{}] Session cleanup failed: {}", it->first, error.what());
+    }
+    if (auto pending = pending_reconnects_.find(it->first);
+        pending != pending_reconnects_.end()) {
+      reconnects.emplace_back(pending->first, std::move(pending->second));
+      pending_reconnects_.erase(pending);
+    }
+    it = session_cleanup_tasks_.erase(it);
+    reload_recent_connections_ = true;
+    recent_connection_image_save_time_ = 0;
   }
+  for (const auto& [id, request] : reconnects) {
+    ConnectTo(id, request.password.c_str(), request.remember_password);
+  }
+}
 
-  for (auto& thread : threads_to_join) {
-    if (thread.joinable()) {
-      thread.join();
+void GuiRuntime::WaitForSessionCleanup() {
+  pending_reconnects_.clear();
+  auto drain = [](std::future<void>& task) {
+    if (!task.valid()) return;
+    try {
+      task.get();
+    } catch (const std::exception& error) {
+      LOG_ERROR("Connection cleanup failed: {}", error.what());
+    }
+  };
+  drain(connection_peer_cleanup_);
+  for (auto& [id, task] : controller_cleanup_tasks_) drain(task);
+  controller_cleanup_tasks_.clear();
+  for (auto& [id, task] : session_cleanup_tasks_) {
+    try {
+      task.get();
+    } catch (const std::exception& error) {
+      LOG_ERROR("[{}] Session cleanup failed: {}", id, error.what());
     }
   }
+  session_cleanup_tasks_.clear();
 }
 
 void GuiRuntime::ResetRemoteSessionResources(
@@ -365,6 +446,11 @@ std::shared_ptr<GuiRuntime::RemoteSession> GuiRuntime::FindRemoteSession(
 
 int GuiRuntime::ConnectTo(const std::string& remote_id, const char* password,
                           bool remember_password, bool bypass_presence_check) {
+  if (session_cleanup_tasks_.count(remote_id)) {
+    pending_reconnects_[remote_id] = {password ? password : "", remember_password};
+    LOG_INFO("[{}] Reconnect queued until previous peer is destroyed", remote_id);
+    return 0;
+  }
   if (!bypass_presence_check && !device_presence_cache_.IsOnline(remote_id)) {
     int ret =
         RequestSingleDevicePresence(remote_id, password, remember_password);
@@ -382,16 +468,14 @@ int GuiRuntime::ConnectTo(const std::string& remote_id, const char* password,
   LOG_INFO("Connect to [{}]", remote_id);
   focused_remote_id_ = remote_id;
 
-  // std::shared_lock shared_lock(remote_sessions_mutex_);
-  bool exists = (remote_sessions_.find(remote_id) != remote_sessions_.end());
-  // shared_lock.unlock();
+  bool exists = FindRemoteSession(remote_id) != nullptr;
 
   if (!exists) {
     PeerPtr* peer_to_init = nullptr;
     std::string local_id;
 
     {
-      // std::unique_lock unique_lock(remote_sessions_mutex_);
+      std::unique_lock unique_lock(remote_sessions_mutex_);
       if (remote_sessions_.find(remote_id) == remote_sessions_.end()) {
         remote_sessions_[remote_id] = std::make_shared<RemoteSession>();
         auto props = remote_sessions_[remote_id];
@@ -399,6 +483,8 @@ int GuiRuntime::ConnectTo(const std::string& remote_id, const char* password,
         props->remote_id_ = remote_id;
         memcpy(&props->params_, &params_, sizeof(Params));
         props->params_.user_id = props->local_id_.c_str();
+        props->peer_events_ = std::make_shared<PeerEventHandler>(*this);
+        props->params_.user_data = props->peer_events_.get();
         props->peer_ = CreatePeer(&props->params_);
 
         props->control_window_width_ = title_bar_height_ * 10.0f;
@@ -445,8 +531,8 @@ int GuiRuntime::ConnectTo(const std::string& remote_id, const char* password,
   }
 
   int ret = -1;
-  // std::shared_lock read_lock(remote_sessions_mutex_);
-  auto props = remote_sessions_[remote_id];
+  auto props = FindRemoteSession(remote_id);
+  if (!props || props->closing_) return -1;
   if (!props->connection_established_) {
     props->connection_status_.store(ConnectionStatus::Connecting);
     show_connection_status_window_ = true;
@@ -470,7 +556,6 @@ int GuiRuntime::ConnectTo(const std::string& remote_id, const char* password,
       }
     }
   }
-  // read_lock.unlock();
 
   return 0;
 }

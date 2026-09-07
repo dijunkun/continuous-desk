@@ -61,8 +61,11 @@ class GuiRuntime : protected gui_detail::GuiState {
 
   void CloseRemoteSession(std::shared_ptr<RemoteSession> props);
   void CloseAllRemoteSessions();
+  void CloseConnectionPeer();
+  void CloseServerController(const std::string& remote_id);
   void ResetRemoteSessionResources(std::shared_ptr<RemoteSession> props);
-  void WaitForThumbnailSaveTasks();
+  void HandleSessionCleanup();
+  void WaitForSessionCleanup();
   std::shared_ptr<RemoteSession> FindRemoteSession(
       const std::string& remote_id);
 
@@ -89,7 +92,7 @@ class GuiRuntime : protected gui_detail::GuiState {
   FileTransferManager transfers_;
   SettingsManager settings_;
   KeyboardController keyboard_;
-  PeerEventHandler peer_events_;
+  std::shared_ptr<PeerEventHandler> peer_events_;
   std::atomic<bool> video_frame_dirty_{false};
   std::unique_ptr<VideoRenderer> video_renderer_;
 

@@ -32,19 +32,17 @@ void PeerEventHandler::OnReceiveVideoBuffer(
     const MiniRtcVideoFrame* video_frame, const char* user_id, size_t user_id_size,
     const char* src_id, size_t src_id_size, void* user_data) {
   auto* handler = static_cast<PeerEventHandler*>(user_data);
+  if (!handler) return;
+  auto callback = handler->EnterCallback();
+  if (!callback) return;
   GuiRuntime* runtime = handler ? &handler->owner_ : nullptr;
   if (!runtime) {
     return;
   }
 
   std::string remote_id(user_id, user_id_size);
-  // std::shared_lock lock(runtime->remote_sessions_mutex_);
-  if (runtime->remote_sessions_.find(remote_id) ==
-      runtime->remote_sessions_.end()) {
-    return;
-  }
-  GuiRuntime::RemoteSession* props =
-      runtime->remote_sessions_.find(remote_id)->second.get();
+  auto props = runtime->FindRemoteSession(remote_id);
+  if (!props) return;
 
   if (props->connection_established_) {
     bool background_snapshot_only = false;
@@ -174,6 +172,9 @@ void PeerEventHandler::OnReceiveAudioBuffer(
     const char* data, size_t size, const char* user_id, size_t user_id_size,
     const char* src_id, size_t src_id_size, void* user_data) {
   auto* handler = static_cast<PeerEventHandler*>(user_data);
+  if (!handler) return;
+  auto callback = handler->EnterCallback();
+  if (!callback) return;
   GuiRuntime* runtime = handler ? &handler->owner_ : nullptr;
   if (!runtime) {
     return;

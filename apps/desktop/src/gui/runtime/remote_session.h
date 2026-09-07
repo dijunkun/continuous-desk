@@ -24,6 +24,8 @@
 #include "display_info.h"
 #include "minirtc.h"
 
+namespace crossdesk { class PeerEventHandler; }
+
 namespace crossdesk::gui_detail {
 
 struct FileTransferState {
@@ -67,6 +69,8 @@ struct FileTransferState {
 struct RemoteSession {
   Params params_;
   PeerPtr* peer_ = nullptr;
+  std::shared_ptr<PeerEventHandler> peer_events_;
+  std::atomic<bool> closing_{false};
   std::string audio_label_ = kAudioStream;
   std::string data_label_ = kDataStream;
   std::string mouse_label_ = kMouseStream;

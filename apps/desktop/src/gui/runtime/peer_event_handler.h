@@ -11,6 +11,7 @@
 #include <string>
 
 #include "minirtc.h"
+#include "runtime/session_lifecycle.h"
 
 namespace crossdesk {
 
@@ -20,6 +21,10 @@ class GuiRuntime;
 class PeerEventHandler {
 public:
   explicit PeerEventHandler(GuiRuntime &owner);
+
+  bool IsActive() const { return callbacks_.IsActive(); }
+  auto EnterCallback() { return callbacks_.Enter(); }
+  void Deactivate() { callbacks_.Close(); }
 
   static void OnReceiveVideoBuffer(const MiniRtcVideoFrame *video_frame,
                                    const char *user_id, size_t user_id_size,
@@ -49,6 +54,7 @@ private:
   static void SendClientInfo(PeerPtr *peer, const std::string &client_id);
 
   GuiRuntime &owner_;
+  gui_detail::SessionCallbackGate callbacks_;
 };
 
 } // namespace crossdesk

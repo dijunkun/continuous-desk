@@ -150,6 +150,7 @@ void KeyboardController::SendHeartbeat(bool force) {
   const std::string target_id = owner_.controlled_remote_id_.empty()
                                     ? owner_.focused_remote_id_
                                     : owner_.controlled_remote_id_;
+  std::shared_lock sessions_lock(owner_.remote_sessions_mutex_);
   const auto props_it = owner_.remote_sessions_.find(target_id);
   if (target_id.empty() || props_it == owner_.remote_sessions_.end() ||
       props_it->second->connection_status_.load() !=
@@ -189,6 +190,7 @@ int KeyboardController::SendKeyCommand(int key_code, bool is_down,
   const std::string target_id = owner_.controlled_remote_id_.empty()
                                     ? owner_.focused_remote_id_
                                     : owner_.controlled_remote_id_;
+  std::shared_lock sessions_lock(owner_.remote_sessions_mutex_);
   const auto props_it = owner_.remote_sessions_.find(target_id);
   if (!target_id.empty() && props_it != owner_.remote_sessions_.end() &&
       props_it->second->connection_status_.load() ==

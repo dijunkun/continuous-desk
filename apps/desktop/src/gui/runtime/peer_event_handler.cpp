@@ -60,6 +60,9 @@ PeerEventHandler::PeerEventHandler(GuiRuntime& owner) : owner_(owner) {}
 void PeerEventHandler::OnSignalMessage(const char* message, size_t size,
                                        void* user_data) {
   auto* handler = static_cast<PeerEventHandler*>(user_data);
+  if (!handler) return;
+  auto callback = handler->EnterCallback();
+  if (!callback) return;
   GuiRuntime* runtime = handler ? &handler->owner_ : nullptr;
   if (!runtime || !message || size == 0) {
     return;
@@ -153,6 +156,9 @@ void PeerEventHandler::OnSignalMessage(const char* message, size_t size,
 void PeerEventHandler::OnSignalStatus(SignalStatus status, const char* user_id,
                                       size_t user_id_size, void* user_data) {
   auto* handler = static_cast<PeerEventHandler*>(user_data);
+  if (!handler) return;
+  auto callback = handler->EnterCallback();
+  if (!callback) return;
   GuiRuntime* runtime = handler ? &handler->owner_ : nullptr;
   if (!runtime) {
     return;
@@ -198,12 +204,8 @@ void PeerEventHandler::OnSignalStatus(SignalStatus status, const char* user_id,
     }
 
     std::string remote_id(client_id.begin() + 2, client_id.end());
-    // std::shared_lock lock(runtime->remote_sessions_mutex_);
-    if (runtime->remote_sessions_.find(remote_id) ==
-        runtime->remote_sessions_.end()) {
-      return;
-    }
-    auto props = runtime->remote_sessions_.find(remote_id)->second;
+    auto props = runtime->FindRemoteSession(remote_id);
+    if (!props) return;
     props->signal_status_ = status;
     if (SignalStatus::SignalConnecting == status) {
       props->signal_connected_ = false;
@@ -230,6 +232,9 @@ void PeerEventHandler::OnConnectionStatus(ConnectionStatus status,
                                           const size_t user_id_size,
                                           void* user_data) {
   auto* handler = static_cast<PeerEventHandler*>(user_data);
+  if (!handler) return;
+  auto callback = handler->EnterCallback();
+  if (!callback) return;
   GuiRuntime* runtime = handler ? &handler->owner_ : nullptr;
   if (!runtime) return;
 
@@ -304,8 +309,7 @@ void PeerEventHandler::OnConnectionStatus(ConnectionStatus status,
           remote_action_codec::Free(remote_action);
         }
 
-        if (!runtime->need_to_create_stream_window_ &&
-            !runtime->remote_sessions_.empty()) {
+        if (!runtime->need_to_create_stream_window_) {
           runtime->need_to_create_stream_window_ = true;
         }
         props->connection_established_ = true;
@@ -496,6 +500,9 @@ void PeerEventHandler::OnNetStatusReport(
     const MiniRtcNetTrafficStats* net_traffic_stats, const char* user_id,
     const size_t user_id_size, void* user_data) {
   auto* handler = static_cast<PeerEventHandler*>(user_data);
+  if (!handler) return;
+  auto callback = handler->EnterCallback();
+  if (!callback) return;
   GuiRuntime* runtime = handler ? &handler->owner_ : nullptr;
   if (!runtime) {
     return;
@@ -556,12 +563,8 @@ void PeerEventHandler::OnNetStatusReport(
   }
 
   std::string remote_id(user_id, user_id_size);
-  // std::shared_lock lock(runtime->remote_sessions_mutex_);
-  if (runtime->remote_sessions_.find(remote_id) ==
-      runtime->remote_sessions_.end()) {
-    return;
-  }
-  auto props = runtime->remote_sessions_.find(remote_id)->second;
+  auto props = runtime->FindRemoteSession(remote_id);
+  if (!props) return;
   if (props->traversal_mode_ != mode) {
     props->traversal_mode_ = mode;
     LOG_INFO("Net mode: [{}]", int(props->traversal_mode_));
