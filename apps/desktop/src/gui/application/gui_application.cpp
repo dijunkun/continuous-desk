@@ -48,6 +48,7 @@
 #include <X11/Xlib.h>
 #include <unistd.h>
 
+#include "platform/linux/gui/cuda_graphics.h"
 #include "platform/linux/gui/tray/linux_tray.h"
 #endif
 #include "rd_log.h"
@@ -1030,6 +1031,7 @@ void GuiApplication::InitializeSettings() {
 
 bool GuiApplication::InitializeSDL() {
 #if defined(__linux__) && !defined(__APPLE__)
+  ConfigureLinuxCudaGraphics(config_center_->IsHardwareVideoCodec());
   // Standard Wayland top-level windows cannot choose an absolute screen
   // position. Use the session's XWayland compatibility server for the GUI so
   // auxiliary windows such as the controlled-side status window can be

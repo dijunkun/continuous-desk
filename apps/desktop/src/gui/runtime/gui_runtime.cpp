@@ -147,9 +147,9 @@ int GuiRuntime::CreateConnectionPeer() {
           sizeof(params_.log_path) - 1);
   params_.log_path[sizeof(params_.log_path) - 1] = '\0';
   params_.hardware_acceleration = config_center_->IsHardwareVideoCodec();
-#if defined(_WIN32) || defined(__APPLE__)
-  // Windows renderers retain pooled CPU NV12 frames or CUDA device frames;
-  // macOS retains VideoToolbox CVPixelBuffers for direct Metal sampling. Both
+#if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
+  // Windows and Linux retain pooled CPU NV12 frames or CUDA device frames;
+  // macOS retains VideoToolbox CVPixelBuffers for direct Metal sampling. All
   // platforms fall back to a packed CPU copy when native upload is unavailable.
   params_.native_video_output = true;
 #else

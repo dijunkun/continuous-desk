@@ -333,6 +333,8 @@ function setup_targets()
                 "apps/desktop/src/platform/windows/gui/slint_backend.cpp",
                 "apps/desktop/src/platform/windows/gui/slint_renderer_probe.cpp",
                 "apps/desktop/src/platform/common/gui/opengl_video_renderer.cpp",
+                "apps/desktop/src/platform/common/gui/cuda_driver.cpp",
+                "apps/desktop/src/platform/common/gui/cuda_opengl_interop.cpp",
                 "apps/desktop/src/platform/common/gui/video_renderer_factory_opengl.cpp",
                 "apps/desktop/src/platform/windows/gui/runtime/windows_service_runtime.cpp",
                 "apps/desktop/src/platform/windows/gui/application/portable_service_integration.cpp")
@@ -350,7 +352,10 @@ function setup_targets()
         elseif is_os("linux") then
             add_links("GL")
             add_files("apps/desktop/src/platform/linux/gui/tray/linux_tray.cpp",
+                "apps/desktop/src/platform/linux/gui/cuda_graphics.cpp",
                 "apps/desktop/src/platform/common/gui/opengl_video_renderer.cpp",
+                "apps/desktop/src/platform/common/gui/cuda_driver.cpp",
+                "apps/desktop/src/platform/common/gui/cuda_opengl_interop.cpp",
                 "apps/desktop/src/platform/common/gui/video_renderer_factory_opengl.cpp")
             add_includedirs("apps/desktop/src/platform/common/gui",
                 "apps/desktop/src/platform/linux/gui/tray",
