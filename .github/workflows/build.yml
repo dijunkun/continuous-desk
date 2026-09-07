@@ -311,6 +311,8 @@ jobs:
     name: Build on iOS (arm64)
     runs-on: macos-26
     timeout-minutes: 120
+    outputs:
+      version: ${{ steps.ios_version.outputs.version }}
     env:
       IOS_DEPLOYMENT_TARGET: "16.0"
       EXPECTED_IOS_SDK: "26.5"
@@ -368,6 +370,26 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v5
+
+      - name: Read independent iOS version
+        id: ios_version
+        shell: bash
+        run: |
+          IOS_VERSION_BASE="$(xcodebuild \
+            -project apps/ios/CrossDeskMobile.xcodeproj \
+            -scheme CrossDeskMobile \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -showBuildSettings CODE_SIGNING_ALLOWED=NO | \
+            awk '$1 == "MARKETING_VERSION" && $2 == "=" { print $3 }')"
+          if [[ ! "${IOS_VERSION_BASE}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid iOS marketing version: ${IOS_VERSION_BASE}" >&2
+            exit 1
+          fi
+          VERSION_NUM="v${IOS_VERSION_BASE}-${VERSION_NUM##*-}"
+          echo "IOS_VERSION_BASE=${IOS_VERSION_BASE}" >> "${GITHUB_ENV}"
+          echo "VERSION_NUM=${VERSION_NUM}" >> "${GITHUB_ENV}"
+          echo "version=${VERSION_NUM}" >> "${GITHUB_OUTPUT}"
 
       - name: Initialize submodules
         run: git submodule update --init --recursive
@@ -439,6 +461,11 @@ jobs:
           fi
 
           xcrun lipo "${EXECUTABLE_PATH}" -verify_arch arm64
+          APP_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${INFO_PLIST}")
+          if [[ "${APP_VERSION}" != "${IOS_VERSION_BASE}" ]]; then
+            echo "Unexpected iOS app version: expected ${IOS_VERSION_BASE}, got ${APP_VERSION}" >&2
+            exit 1
+          fi
           MINIMUM_OS=$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "${INFO_PLIST}")
           if [[ "${MINIMUM_OS}" != "${IOS_DEPLOYMENT_TARGET}" ]]; then
             echo "Unexpected minimum iOS version: expected ${IOS_DEPLOYMENT_TARGET}, got ${MINIMUM_OS}" >&2
@@ -749,6 +776,25 @@ jobs:
           echo "BUILD_DATE_ISO=${BUILD_DATE_ISO}" >> $GITHUB_OUTPUT
           echo "PATCH_NUMBER=${PATCH_NUMBER}" >> $GITHUB_OUTPUT
 
+      - name: Prepare release notes
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.VERSION_WITH_V }}
+          VERSION_BASE: ${{ steps.version.outputs.VERSION_BASE }}
+        run: |
+          if [[ -f "docs/releases/${RELEASE_TAG}.md" ]]; then
+            cp "docs/releases/${RELEASE_TAG}.md" release-notes.md
+          elif [[ -f "docs/releases/v${VERSION_BASE}.md" ]]; then
+            cp "docs/releases/v${VERSION_BASE}.md" release-notes.md
+          else
+            cat > release-notes.md << 'EOF'
+          Binary release only. Source code is not included.
+
+          ## Code signing policy
+
+          Free code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+          EOF
+          fi
+
       - name: Rename artifacts
         run: |
           mkdir -p release
@@ -756,7 +802,7 @@ jobs:
           cp artifacts/crossdesk-macos-arm64-${{ steps.version.outputs.VERSION_WITH_V }}/* release/crossdesk-macos-arm64-${{ steps.version.outputs.VERSION_WITH_V }}.pkg
           cp artifacts/crossdesk-linux-amd64-${{ steps.version.outputs.VERSION_WITH_V }}/* release/crossdesk-linux-amd64-${{ steps.version.outputs.VERSION_WITH_V }}.deb
           cp artifacts/crossdesk-linux-arm64-${{ steps.version.outputs.VERSION_WITH_V }}/* release/crossdesk-linux-arm64-${{ steps.version.outputs.VERSION_WITH_V }}.deb
-          cp artifacts/crossdesk-ios-arm64-unsigned-${{ steps.version.outputs.VERSION_WITH_V }}/* release/crossdesk-ios-arm64-unsigned-${{ steps.version.outputs.VERSION_WITH_V }}.zip
+          cp artifacts/crossdesk-ios-arm64-unsigned-${{ needs.build-ios.outputs.version }}/* release/crossdesk-ios-arm64-unsigned-${{ needs.build-ios.outputs.version }}.zip
           cp artifacts/crossdesk-win-x64-${{ steps.version.outputs.VERSION_WITH_V }}/* release/crossdesk-win-x64-${{ steps.version.outputs.VERSION_WITH_V }}.exe
           cp artifacts/crossdesk-win-x64-portable-${{ steps.version.outputs.VERSION_WITH_V }}/* release/crossdesk-win-x64-portable-${{ steps.version.outputs.VERSION_WITH_V }}.zip
 
@@ -767,17 +813,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.VERSION_WITH_V }}
+          target_commitish: ${{ github.sha }}
           name: Release ${{ steps.version.outputs.VERSION_WITH_V }}
           draft: false
           prerelease: false
           files: release/*
           generate_release_notes: false
-          body: |
-            Binary release only. Source code is not included.
-
-            ## Code signing policy
-
-            Free code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+          body_path: release-notes.md
 
       - name: Create or update 'latest' tag
         run: |
@@ -795,12 +837,7 @@ jobs:
           prerelease: false
           files: release/*
           generate_release_notes: false
-          body: |
-            Binary release only. Source code is not included.
-
-            ## Code signing policy
-
-            Free code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+          body_path: release-notes.md
 
       - name: Upload artifacts to server
         uses: burnett01/rsync-deployments@5.2
@@ -851,6 +888,11 @@ jobs:
             }
           }
           EOF
+          jq --arg release_name "Release ${{ steps.version.outputs.VERSION_WITH_V }}" \
+            --rawfile release_notes release-notes.md \
+            '.releaseName = $release_name | .releaseNotes = $release_notes' \
+            version.json > version-with-notes.json
+          mv version-with-notes.json version.json
           cat version.json
 
       - name: Upload version.json to server
