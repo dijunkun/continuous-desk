@@ -1169,8 +1169,12 @@ private struct FloatingSessionMenu: View {
     }
 
     private var statusDetail: String {
-        var components = [session.usingTURN ? "TURN" : "P2P",
-                          session.formattedBitrate]
+        var components = [session.usingTURN ? "TURN" : "P2P"]
+        let frameSize = session.frameSize
+        if frameSize.width > 0 && frameSize.height > 0 {
+            components.append("\(Int(frameSize.width))×\(Int(frameSize.height))")
+        }
+        components.append(session.formattedBitrate)
         if session.lossRate > 0 {
             components.append(String(format: "丢包 %.1f%%", session.lossRate * 100))
         }
