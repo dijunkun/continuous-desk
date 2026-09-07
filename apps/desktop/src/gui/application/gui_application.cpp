@@ -1151,6 +1151,7 @@ void GuiApplication::InitializeSystemTray() {
     ui_->main->show();
     ui_->main->window().set_minimized(false);
 #if defined(__APPLE__)
+    MacActivateWindow(ui_->main->window().appkit_view());
     // A window restored from the tray may only obtain its NSWindow after the
     // callback returns, so let the regular UI tick configure it.
     ui_->main_native_titlebar_attempts = 30;
@@ -1161,16 +1162,12 @@ void GuiApplication::InitializeSystemTray() {
       ui_->main->hide();
     }
   };
-  auto open_settings = [this] {
+  auto open_settings = [this, show_window] {
     if (!ui_) {
       return;
     }
-    ui_->main->show();
-    ui_->main->window().set_minimized(false);
+    show_window();
     ui_->main->set_settings_open(true);
-#if defined(__APPLE__)
-    ui_->main_native_titlebar_attempts = 30;
-#endif
   };
   auto exit_app = [this] {
     exit_ = true;

@@ -57,6 +57,8 @@ struct MacTrayImpl {
     } else if (app_window) {
       SDL_HideWindow(app_window);
     }
+    // Keep running through the menu-bar tray without a Dock application icon.
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
   }
 
   void RemoveTrayIcon() {
@@ -69,6 +71,8 @@ struct MacTrayImpl {
   }
 
   void ShowWindow() {
+    // Restore normal application behavior before showing or focusing a window.
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     if (show_window) {
       show_window();
     } else if (app_window) {
@@ -142,6 +146,7 @@ struct MacTrayImpl {
   }
 
   void OpenSettings() {
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     if (open_settings) {
       open_settings();
     } else {
@@ -278,6 +283,13 @@ MacTray::MacTray(std::function<void()> show_window,
           language_index)) {}
 
 MacTray::~MacTray() = default;
+
+void MacActivateWindow(void *appkit_view) {
+  NSView *view = (__bridge NSView *)appkit_view;
+  NSWindow *window = [view window];
+  [NSApp activateIgnoringOtherApps:YES];
+  [window makeKeyAndOrderFront:nil];
+}
 
 void MacTray::MinimizeToTray() { impl_->MinimizeToTray(); }
 

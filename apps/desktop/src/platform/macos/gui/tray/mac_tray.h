@@ -17,6 +17,9 @@ namespace crossdesk {
 
 struct MacTrayImpl;
 
+// Activates the app and focuses the restored Slint window's current NSView.
+void MacActivateWindow(void* appkit_view);
+
 class MacTray {
  public:
   MacTray(::SDL_Window* app_window, const std::string& tooltip,
