@@ -371,7 +371,7 @@ final class RemoteTouchSurface: UIView, UIGestureRecognizerDelegate {
         if controlMode == .relative {
             switch recognizer.state {
             case .began:
-                guard renderRect()?.contains(location) == true else { return }
+                guard canStartRelativePointerGesture(at: location) else { return }
                 hoverLastLocation = location
                 onMove?(relativeCursorPoint.0, relativeCursorPoint.1)
             case .changed:
@@ -398,7 +398,7 @@ final class RemoteTouchSurface: UIView, UIGestureRecognizerDelegate {
         switch recognizer.state {
         case .began:
             let location = recognizer.location(in: self)
-            relativePanActive = renderRect()?.contains(location) == true
+            relativePanActive = canStartRelativePointerGesture(at: location)
             recognizer.setTranslation(.zero, in: self)
             if relativePanActive {
                 onMove?(relativeCursorPoint.0, relativeCursorPoint.1)
@@ -419,7 +419,7 @@ final class RemoteTouchSurface: UIView, UIGestureRecognizerDelegate {
         let location = recognizer.location(in: self)
         switch recognizer.state {
         case .began:
-            guard renderRect()?.contains(location) == true else { return }
+            guard canStartRelativePointerGesture(at: location) else { return }
             heldDragLastLocation = location
             heldDragPoint = relativeCursorPoint
             onMove?(relativeCursorPoint.0, relativeCursorPoint.1)
@@ -447,10 +447,16 @@ final class RemoteTouchSurface: UIView, UIGestureRecognizerDelegate {
 
     private func pointerPoint(for location: CGPoint) -> (Float, Float)? {
         if controlMode == .relative {
-            guard renderRect()?.contains(location) == true else { return nil }
+            guard canStartRelativePointerGesture(at: location) else { return nil }
             return relativeCursorPoint
         }
         return normalized(location)
+    }
+
+    private func canStartRelativePointerGesture(at location: CGPoint) -> Bool {
+        // The entire touch surface acts as a trackpad, including letterboxing.
+        // A valid video rect is still required to scale pointer movement.
+        bounds.contains(location) && renderRect() != nil
     }
 
     private func updateRelativeCursor(by translation: CGPoint) -> (Float, Float)? {
