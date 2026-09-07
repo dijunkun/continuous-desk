@@ -245,6 +245,8 @@ struct RemoteSessionView: View {
     }
 
     private var floatingStatusControls: some View {
+        // Keep the orb and expanded menu inside the safe area so their initial
+        // positions and drag bounds clear the Dynamic Island in either orientation.
         GeometryReader { proxy in
             let containerSize = proxy.size
             let restingOrbCenter = boundedOrbCenter(in: containerSize)
@@ -332,7 +334,6 @@ struct RemoteSessionView: View {
                     )
             }
         }
-        .ignoresSafeArea()
     }
 
     private var draggableKeyboard: some View {
