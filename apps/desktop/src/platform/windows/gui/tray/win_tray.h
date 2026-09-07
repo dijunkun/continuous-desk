@@ -33,6 +33,7 @@ class WinTray {
   bool HandleTrayMessage(MSG* msg);
 
  private:
+  bool EnsureTrayIcon();
   void ShowApplicationWindow();
   void OpenSettings();
 
@@ -42,6 +43,7 @@ class WinTray {
   std::wstring tip_;
   int language_index_;
   NOTIFYICONDATA nid_;
+  bool tray_icon_added_ = false;
   std::function<void()> show_window_;
   std::function<void()> hide_window_;
   std::function<void()> open_settings_;

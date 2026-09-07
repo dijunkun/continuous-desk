@@ -392,7 +392,10 @@ struct LinuxTrayImpl {
         exit_menu_label(GetExitMenuLabel(language_index_value)),
         exit_menu_ascii_label(IsAsciiPrintable(exit_menu_label)
                                   ? exit_menu_label
-                                  : "Exit") {}
+                                  : "Exit") {
+
+    EnsureTrayIcon();
+  }
 
   explicit LinuxTrayImpl(std::function<void()> show_window_callback,
                          std::function<void()> hide_window_callback,
@@ -416,7 +419,9 @@ struct LinuxTrayImpl {
         exit_menu_label(GetExitMenuLabel(language_index_value)),
         exit_menu_ascii_label(IsAsciiPrintable(exit_menu_label)
                                   ? exit_menu_label
-                                  : "Exit") {}
+                                  : "Exit") {
+    EnsureTrayIcon();
+  }
 
   ~LinuxTrayImpl() { RemoveTrayIcon(); }
 

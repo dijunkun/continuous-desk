@@ -60,6 +60,8 @@ WinTray::WinTray(HWND app_hwnd, HICON icon, const std::wstring& tooltip,
   nid_.uCallbackMessage = WM_TRAY_CALLBACK;
   nid_.hIcon = icon_;
   wcsncpy_s(nid_.szTip, tip_.c_str(), _TRUNCATE);
+
+  EnsureTrayIcon();
 }
 
 WinTray::WinTray(std::function<void()> show_window,
@@ -80,7 +82,7 @@ WinTray::~WinTray() {
 }
 
 void WinTray::MinimizeToTray() {
-  Shell_NotifyIcon(NIM_ADD, &nid_);
+  EnsureTrayIcon();
   if (hide_window_) {
     hide_window_();
   } else if (app_hwnd_) {
@@ -88,7 +90,25 @@ void WinTray::MinimizeToTray() {
   }
 }
 
-void WinTray::RemoveTrayIcon() { Shell_NotifyIcon(NIM_DELETE, &nid_); }
+bool WinTray::EnsureTrayIcon() {
+  if (tray_icon_added_) {
+    // NIM_MODIFY also detects an icon lost when Explorer was restarted.
+    if (Shell_NotifyIcon(NIM_MODIFY, &nid_)) {
+      return true;
+    }
+    tray_icon_added_ = false;
+  }
+
+  tray_icon_added_ = Shell_NotifyIcon(NIM_ADD, &nid_) != FALSE;
+  return tray_icon_added_;
+}
+
+void WinTray::RemoveTrayIcon() {
+  if (tray_icon_added_) {
+    Shell_NotifyIcon(NIM_DELETE, &nid_);
+    tray_icon_added_ = false;
+  }
+}
 
 void WinTray::ShowApplicationWindow() {
   if (show_window_) {
