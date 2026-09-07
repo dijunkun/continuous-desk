@@ -1,429 +1,211 @@
-# CrossDesk
+<div align="center">
+  <img src="apps/desktop/resources/linux/crossdesk_128x128.png" width="80" alt="CrossDesk 标志" />
+  <h1>CrossDesk</h1>
+  <p>轻量、跨平台的远程桌面，让电脑、浏览器和 iPhone / iPad 连接到同一张桌面。</p>
+  <p><a href="https://www.crossdesk.cn/">官方网站</a> · <a href="https://github.com/kunkundi/crossdesk/releases">下载客户端</a> · <a href="https://web.crossdesk.cn/">打开 Web 客户端</a> · <a href="README_EN.md">English</a></p>
+</div>
 
-<a href="https://hellogithub.com/repository/kunkundi/crossdesk" target="_blank"><img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=55d41367570345f1838e02fd12be7961&claim_uid=cb0OpZRrBuGVAfL&theme=small" alt="Featured｜HelloGitHub" /></a>
+<div align="center">
 
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-brightgreen.svg)](https://www.crossdesk.cn/)
-[![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![GitHub last commit](https://img.shields.io/github/last-commit/kunkundi/crossdesk)](https://github.com/kunkundi/crossdesk/commits/web-client)
-[![Build Status](https://github.com/kunkundi/crossdesk/actions/workflows/build.yml/badge.svg)](https://github.com/kunkundi/crossdesk/actions)  
-[![Docker Pulls](https://img.shields.io/docker/pulls/crossdesk/crossdesk-server)](https://hub.docker.com/r/crossdesk/crossdesk-server/tags)
-[![GitHub issues](https://img.shields.io/github/issues/kunkundi/crossdesk.svg)](https://github.com/kunkundi/crossdesk/issues)
-[![GitHub stars](https://img.shields.io/github/stars/kunkundi/crossdesk.svg?style=social)](https://github.com/kunkundi/crossdesk/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/kunkundi/crossdesk.svg?style=social)](https://github.com/kunkundi/crossdesk/forks)
+[![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20iOS-blue)](#download)
+[![Release](https://img.shields.io/github/v/release/kunkundi/crossdesk)](https://github.com/kunkundi/crossdesk/releases)
+[![Build](https://github.com/kunkundi/crossdesk/actions/workflows/build.yml/badge.svg)](https://github.com/kunkundi/crossdesk/actions/workflows/build.yml)
+[![License: GPL v3](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/kunkundi/crossdesk?style=social)](https://github.com/kunkundi/crossdesk/stargazers)
 
-[ [English](README_EN.md) / 中文 ]
+</div>
 
----
+CrossDesk 支持 Windows、macOS、Linux 之间的远程访问，也可从浏览器或原生 iOS 客户端控制电脑。项目基于 [MiniRTC](https://github.com/kunkundi/minirtc)，提供实时音视频传输、键鼠控制、文件传输与自托管能力，仍在持续开发中。
+
+> 本文按当前仓库代码整理。截图展示当前 Slint 桌面界面，使用演示 ID、密码、在线状态和连接记录；缩略图来自公开页面；下载包的功能与系统要求请同时核对对应 Release 说明。原生 iOS 客户端的构建、签名方式见下文。
+
+[界面预览](#preview) · [下载与安装](#download) · [快速连接](#quick-start) · [会话操作](#session) · [设置](#settings) · [iOS](#ios) · [自托管](#self-hosting) · [源码构建](docs/BUILD.md) · [常见问题](docs/FAQ.md)
+
+<a id="preview"></a>
 
 ## 界面预览
 
-### PC 客户端
+### 桌面客户端
 
-![sup_example](https://github.com/user-attachments/assets/eeb64fbe-1f07-4626-be1c-b77396beb905)
+主窗口集中展示本机 ID、连接密码、远程连接入口和近期连接记录。
+
+<p align="center">
+  <img src="docs/images/desktop-main-zh.png" width="800" alt="当前桌面客户端示例：已连接服务器，三台在线设备均显示页面缩略图" />
+</p>
 
 ### Web 客户端
 
+在浏览器中输入远程设备 ID 和密码，无需在控制端安装桌面客户端。
+
 <p align="center">
-  <img width="850" height="550" alt="6bddcbed47ffd4b9988a4037c7f4f524" src="https://github.com/user-attachments/assets/e44f73f9-24ac-46a3-a189-b7f8b6669881" />
+  <img src="docs/images/web-client.png" width="800" alt="CrossDesk Web 客户端当前连接首页" />
 </p>
 
----
+图片来源与更新方式见 [截图说明](docs/images/README.md)。
 
-## 简介
+## 主要功能
 
-CrossDesk 是一个轻量级的跨平台远程桌面软件，支持 Web 端控制远程设备。
-
-CrossDesk 是 [MiniRTC](https://github.com/kunkundi/minirtc.git) 实时音视频传输库的实验性应用。MiniRTC 是一个轻量级的跨平台实时音视频传输库。它具有网络透传（[RFC5245](https://datatracker.ietf.org/doc/html/rfc5245)），视频软硬编解码（H264/AV1），音频编解码（[Opus](https://github.com/xiph/opus)），信令交互，网络拥塞控制，传输加密（[SRTP](https://tools.ietf.org/html/rfc3711)）等基础能力。
-
----
-
-## 系统要求
-
-| 平台 | 最低版本 |
+| 能力 | 当前支持 |
 | --- | --- |
-| **Windows** | Windows 10 及以上 (64 位) |
-| **macOS** | macOS Intel 15.0 及以上 ( 大于 14.0 小于 15.0 的版本可自行编译实现兼容 )<br> macOS Apple Silicon 14.0 及以上 |
-| **Linux** | Ubuntu 20.04 及以上 |
+| 跨平台控制 | Windows / macOS / Linux 桌面互控；浏览器与原生 iOS 作为控制端 |
+| 实时画面与声音 | H.264 / AV1、30 / 60 fps 设置、硬件编解码选项、远端声音播放；实际能力取决于设备与构建配置 |
+| 多设备与多显示器 | 近期连接、设备别名、会话标签与远端显示器切换 |
+| 输入与协作 | 键鼠输入、远端光标同步、组合键、文本剪贴板同步、文件传输 |
+| 网络与部署 | P2P 直连、TURN 中继、SRTP 加密选项、自托管信令与中继服务 |
+| Windows 锁屏控制 | 通过 CrossDesk Service 支持锁屏、登录界面及安全桌面的输入转发 |
 
----
+各客户端的入口和能力有所不同；桌面会话操作见下文，iOS 的具体功能见 [开发说明](apps/ios/README.md)。
 
-## 使用
+<a id="download"></a>
 
-在菜单栏“对端ID”处输入远端桌面的ID，点击“→”即可发起远程连接。
+## 下载与安装
 
-![usage1](https://github.com/user-attachments/assets/3a4bb59f-c84c-44d2-9a20-11790aac510e)
+前往 [GitHub Releases](https://github.com/kunkundi/crossdesk/releases) 或 [官方网站](https://www.crossdesk.cn/)，按系统与 CPU 架构选择安装包。
 
-如果远端桌面设置了连接密码，则本端需填写正确的连接密码才能成功发起远程连接。
+| 平台 | 当前源码 / CI 基线 | 安装方式 |
+| --- | --- | --- |
+| Windows | Windows 10+，x64 | `.exe` 安装包；便携构建也受支持 |
+| macOS | macOS 14.0+，Intel / Apple Silicon | 选择 x64 或 arm64 的 `.pkg` |
+| Linux | Ubuntu 20.04+，amd64 / arm64，glibc 2.31 基线 | `.deb` 安装包 |
+| iOS / iPadOS | iOS 16.0+，arm64 真机 | 原生客户端；使用 Xcode 构建并签名，CI 产物为未签名应用 |
+| Web | 支持 WebRTC 的浏览器 | 访问 [web.crossdesk.cn](https://web.crossdesk.cn/) |
 
-![password](https://github.com/user-attachments/assets/1beadcce-640d-4f5c-8e77-51917b5294d5)
+Linux 下载后，在下载目录中将文件名替换为实际安装包名称：
 
-发起连接前，可在设置中自定义配置项，如语言、视频编码格式等。
-![settings](https://github.com/user-attachments/assets/8bc5468d-7bbb-4e30-95bd-da1f352ac08c)
+```bash
+sudo apt install "./crossdesk-linux-amd64-<version>.deb"
+```
 
-### 使用 Web 客户端
+**macOS 首次运行：** 按应用提示，在“系统设置 → 隐私与安全性”中授予 CrossDesk **屏幕录制**（新系统可能显示为“屏幕与系统音频录制”）及 **辅助功能**权限，再按系统提示重新打开应用。前者用于捕获桌面，后者用于远程键鼠输入。
 
-浏览器访问 [CrossDesk Web Client](https://web.crossdesk.cn/)。
-输入 **远程设备 ID** 与 **密码**，点击连接即可接入远程设备。如图，**iOS Safari 远程控制 Win11**：
+<a id="quick-start"></a>
 
-<img width="645" height="300" alt="_cgi-bin_mmwebwx-bin_webwxgetmsgimg__ MsgID=932911462648581698 skey=@crypt_1f5153b1_b550ca7462b5009ce03c991cca2a92a7 mmweb_appid=wx_webfilehelper" src="https://github.com/user-attachments/assets/a5109e6f-752c-4654-9f4e-7e161bddf43e" />
+## 快速连接
 
-### Windows 服务（CrossDesk Service）
+### 从另一台电脑连接
 
-CrossDesk 在 Windows 平台提供本地辅助服务 **CrossDesk Service**，服务名为 `CrossDeskService`。该服务用于锁屏、登录界面和安全桌面等受保护场景下的远程控制增强能力，包括：
+1. **准备被控电脑。** 安装并运行 CrossDesk，等待底部显示“已连接服务器”。在左侧“本桌面”查看 **本机 ID** 和 **密码**，提供给控制端。
+2. **输入对端 ID。** 在控制端右侧“远程桌面 → 对端 ID”输入被控电脑的 ID，点击 **→**。
+3. **完成密码验证。** 按弹窗输入被控电脑当前的连接密码，确认后等待远程画面出现。需要保存密码时勾选“记住密码”。
+4. **再次连接。** 成功连接过的设备会出现在“近期连接”中，可通过卡片重连，也可编辑别名或删除记录。
 
-- 上报远端当前是否处于锁屏、登录、凭据输入或安全桌面状态；
-- 支持从控制端发送 `Ctrl+Alt+Del`（SAS）；
-- 在锁屏、登录和安全桌面阶段转发键盘、鼠标输入。
+本机密码旁的眼睛按钮用于显示 / 隐藏密码，铅笔按钮用于修改密码。修改时使用 **6 位数字或英文字母**，并保持连接服务器；等待修改成功、客户端重新连接后，再复制当前密码。已保存旧密码的控制端需重新输入。
 
-Windows 安装包会自动打包 `crossdesk_service.exe` 和 `crossdesk_session_helper.exe`，并在安装时注册为按需启动的 Windows 服务。CrossDesk 客户端启动时会尝试启动已安装的服务；当本机没有 CrossDesk 客户端进程运行时，服务会自动退出。卸载客户端时会同步停止并移除该服务。
+### 从浏览器连接
 
-如果是手动编译或手动部署 Windows 版本，请确保 `CrossDesk.exe`、`crossdesk_service.exe` 和 `crossdesk_session_helper.exe` 位于同一目录。安装或卸载服务需要使用管理员权限打开 PowerShell：
+1. 保持被控电脑上的 CrossDesk 运行，并确认已连接服务器；在被控端“设置”中保持 **启用 SRTP** 开启。
+2. 打开 [Web 客户端](https://web.crossdesk.cn/)，输入 **远程设备 ID** 和 **密码**，点击“连接”。
+3. 连接后使用页面提供的显示器、鼠标模式和键盘控件操作远端；手机和平板也可通过浏览器访问。
+
+如果使用自建服务器，需要让控制端与被控端接入同一服务；Web 部署配置见 [CrossDesk Web Client](https://github.com/kunkundi/crossdesk-web-client)。
+
+<a id="session"></a>
+
+## 会话中的常用操作
+
+远程窗口通过会话标签切换设备，控制栏提供以下操作；控制栏收起时先点击展开按钮。将鼠标悬停在图标上可查看提示。
+
+| 入口 | 用途 |
+| --- | --- |
+| 显示器 | 切换远端显示器 |
+| 键盘 | 发送组合键；Windows 的 `Ctrl+Alt+Del` 依赖远端服务 |
+| 鼠标 | 控制 / 释放远端鼠标 |
+| 扬声器 | 播放声音 / 静音 |
+| 文件夹 | 选择文件发送到远端，并查看传输进度 |
+| 网络状态 | 查看流量、丢包率、帧率、分辨率及直连 / 中继状态 |
+| 全屏 | 进入 / 退出全屏 |
+| 断开连接 | 结束当前远程会话 |
+
+桌面端可同步文本剪贴板。接收文件的位置可在“设置 → 文件保存路径”调整。关闭主窗口会隐藏窗口并保持程序运行；需要完全退出时使用系统托盘或菜单栏中的退出入口。
+
+<a id="settings"></a>
+
+## 调整画面与连接设置
+
+点击主窗口右上角 **☰ → 设置**，修改后点击“确认”保存。建议在建立连接前调整；会话进行中部分选项不可修改。设置列表可向下滚动，查看自托管、启动方式与文件保存路径。
+
+<p align="center">
+  <img src="docs/images/desktop-settings-zh.png" width="720" alt="当前设置界面：画质、帧率、画面偏好、编解码、中继与 SRTP" />
+</p>
+
+| 设置 | 说明 |
+| --- | --- |
+| 画面质量 / 帧率 | 选择低、中、高画质与 30 / 60 fps；实际帧率取决于网络和设备 |
+| 画面偏好 | 在帧率优先、画质优先、平衡之间选择 |
+| 视频编码格式 | H.264 / AV1；硬件编解码是否可用取决于平台、硬件与构建选项 |
+| 启用中继服务 | 允许借助 TURN 中继建立连接；P2P 连接失败时先检查此项 |
+| 启用 SRTP | 媒体传输加密选项，两端配置需兼容 |
+| 自托管配置 | 设置服务器地址、信令端口与中继端口，并勾选启用 |
+| 开机自启 / 启用守护进程 | 调整启动与进程守护行为，按界面提示重启后生效 |
+| 文件保存路径 | 选择接收文件的目录 |
+
+<a id="ios"></a>
+
+## 原生 iOS / iPadOS 客户端
+
+仓库的 [`apps/ios`](apps/ios/README.md) 提供原生控制端，与桌面端使用同一套 MiniRTC 协议。它可以控制远端电脑；当前不提供将 iPhone / iPad 作为被控桌面的功能。
+
+1. 按 [iOS 开发说明](apps/ios/README.md) 使用 Xcode 构建并签名，安装到 iOS 16+ 的真机。
+2. 在首页输入对端 ID，点击连接并填写密码；成功连接后可从“最近连接”中重连。
+3. 在设置中选择鼠标模式：**相对位置**像触控板一样移动光标，**绝对位置**将触摸位置直接映射到远端画面。
+4. 点击悬浮图标展开菜单，可切换显示器、显示键盘、控制声音或发送文件。收到的文件位于应用的 `Documents/Received`，可通过传输状态旁的分享按钮导出。
+
+当前支持接收远端文本到 iOS 剪贴板；界面暂未提供主动发送本机剪贴板的按钮。
+
+当前支持单指点击、双指右键、长按拖动与捏合缩放；缩放后的双指平移用于移动视图。原生端与浏览器端分别维护，使用入口和手势可能不同。
+
+<a id="windows-service"></a>
+
+## Windows 锁屏与登录界面
+
+**CrossDesk Service**（服务名 `CrossDeskService`）提供锁屏、登录、凭据输入及安全桌面的状态上报、`Ctrl+Alt+Del` 发送和键鼠输入转发。
+
+安装版会注册按需启动的服务，客户端启动时尝试启动它；本机没有 CrossDesk 客户端进程后服务会自动退出。便携版可在提示窗口或“设置 → 锁屏控制服务”中安装服务，需要管理员权限。该服务依赖客户端运行。
+
+<details>
+<summary>手动部署与服务管理命令</summary>
+
+保留完整安装目录；自行部署构建产物时，将 `CrossDesk.exe`、`crossdesk_service.exe`、`crossdesk_session_helper.exe` 及同次构建输出的全部 `.dll` 放在同一目录。在该目录打开管理员 PowerShell，按需执行：
 
 ```powershell
-# 安装
 .\CrossDesk.exe --service-install
-# 启动
 .\CrossDesk.exe --service-start
-# 查看状态
 .\CrossDesk.exe --service-status
-# 停止
+.\CrossDesk.exe --service-ping
+# 停止或卸载服务
 .\CrossDesk.exe --service-stop
-# 卸载
 .\CrossDesk.exe --service-uninstall
 ```
 
-如果远端 Windows 服务未安装、未启动或暂时不可用，基础远程桌面连接仍可使用，但锁屏、登录界面和安全桌面阶段的控制能力会受限，客户端会提示“远端Windows服务不可用”。
+</details>
 
----
+出现“远端 Windows 服务不可用”时，检查被控电脑的安装和服务状态；普通桌面连接仍可使用，受保护界面的控制能力会受限。
 
-## 如何编译
-
-### 构建依赖
-
-- [xmake](https://xmake.io/#/guide/installation)
-- [cmake](https://cmake.org/download/) 3.21 及以上（系统版本过低时由 xmake 自动安装）
-
-### Linux
-
-Linux 构建支持 Ubuntu 20.04 及以上版本的 amd64 和 arm64。发布安装包以
-Ubuntu 20.04/glibc 2.31 为兼容基线。先安装基础编译依赖：
-
-```bash
-sudo apt-get update
-sudo apt-get install -y \
-  git curl unzip build-essential gcc-10 g++-10 python3-pip \
-  pkg-config binutils dpkg-dev \
-  libx11-dev libxext-dev libxrender-dev libxft-dev libxrandr-dev \
-  libxinerama-dev libxcursor-dev libxi-dev libxfixes-dev libxv-dev \
-  libxtst-dev libxcb-randr0-dev libxcb-xtest0-dev libxcb-xinerama0-dev \
-  libxcb-shape0-dev libxcb-xkb-dev libxcb-xfixes0-dev libxcb-shm0-dev \
-  libasound2-dev libsndio-dev libpulse-dev \
-  libgl1-mesa-dev
-```
-
-Ubuntu 20.04 自带的 CMake 3.16 不满足要求时，xmake 会自动下载并使用
-CMake 3.21 或更高版本，无需手动替换系统 CMake。
-
-Ubuntu 20.04 默认的 GCC 9 缺少 Slint C++ API 所需的部分 C++20 标准库，
-因此上述命令同时安装并在后续配置中指定 GCC 10。
-
-需要启用 Wayland 捕获或 DRM 捕获时，再安装对应依赖：
-
-```bash
-sudo apt-get install -y libdbus-1-dev libdrm-dev
-
-# Ubuntu 22.04 及以上也可以直接安装系统开发包
-# sudo apt-get install -y libpipewire-0.3-dev libspa-0.2-dev
-```
-
-下载子模块并编译 Release 版本：
-
-```bash
-git clone --recurse-submodules https://github.com/kunkundi/crossdesk.git
-cd crossdesk
-
-# 已经克隆过仓库时执行这一行
-git submodule update --init --recursive
-
-# Ubuntu 20.04 没有 PipeWire 0.3 开发包，安装仅用于编译的头文件 SDK。
-# 已安装发行版 PipeWire 0.3 开发包时可跳过此步骤。
-sudo ./docker/linux-build/install-pipewire-sdk.sh
-
-xmake f -c -m release --USE_CUDA=false --toolchain=gcc-10 -y
-xmake b -vy crossdesk
-```
-
-这里应使用 `--toolchain=gcc-10`，以确保 CrossDesk 及 xmake 在配置阶段构建的
-libyuv 等第三方包都使用 GCC 10。只指定 `--cc`/`--cxx` 时，依赖安装可能仍回退到
-系统默认的 `/bin/cc` 和 `/bin/c++`。`-c` 会清除旧配置，切换编译器时必须保留。
-
-amd64 构建结果位于 `build/linux/x86_64/release/crossdesk`，arm64 构建结果位于 `build/linux/arm64/release/crossdesk`。
-
-启用 Wayland 和 DRM 的配置示例：
-
-```bash
-xmake f -c -m release --USE_WAYLAND=true --USE_DRM=true --USE_CUDA=false \
-  --toolchain=gcc-10 -y
-xmake b -vy crossdesk
-```
-
-生成 Debian 安装包（必须在对应架构上先完成 Release 编译）：
-
-```bash
-# amd64
-./apps/desktop/scripts/linux/pkg_amd64.sh 1.0.0
-
-# arm64
-./apps/desktop/scripts/linux/pkg_arm64.sh 1.0.0
-```
-
-打包脚本会将 Slint 共享运行库安装到软件包私有目录 `/usr/lib/crossdesk`，无需用户另外安装 `libslint_cpp.so`。
-PipeWire 不属于强制运行时依赖：程序在运行时检测宿主系统的 PipeWire 0.3，
-没有该运行库时仍可使用 X11（以及构建时启用的 DRM）捕获。
-
-### 通用编译选项
-
-```text
---USE_CUDA=true/false: 启用 CUDA 硬件编解码，默认不启用
---USE_WAYLAND=true/false: 在 Linux 上启用 Wayland/PipeWire 捕获，默认不启用
---USE_DRM=true/false: 在 Linux 上启用 DRM 捕获，默认不启用
---CROSSDESK_PORTABLE=true/false: 构建便携版本，默认不启用
---CROSSDESK_VERSION=xxx: 指定 CrossDesk 的版本
-
-# 示例
-xmake f --CROSSDESK_VERSION=1.0.0 --USE_CUDA=true
-```
-
-运行：
-
-```bash
-xmake r crossdesk
-```
-
-### 无 CUDA 环境下的开发支持
-
-对于**未安装 CUDA 环境的 Linux 开发者，如果希望编译后的成果物拥有硬件编解码能力**，这里提供了预配置的 [Ubuntu 20.04 兼容构建镜像](https://hub.docker.com/r/crossdesk/ubuntu20.04)。该镜像内置必要的构建依赖，可生成兼容 glibc 2.31 的单一 Linux 安装包。
-
-进入容器，下载工程后执行：
-
-```bash
-export CUDA_PATH=/usr/local/cuda
-export XMAKE_GLOBALDIR=/data
-
-xmake f --USE_CUDA=true
-xmake b --root -vy crossdesk
-```
-
-对于**未安装 CUDA 环境的 Windows 开发者**，执行下面的命令安装 CUDA 编译环境：
-
-```powershell
-xmake require -vy "cuda 12.6.3"
-```
-
-安装完成后执行:
-
-```powershell
-xmake require --info "cuda 12.6.3"
-```
-
-输出如下:
-
-<img width="860" height="226" alt="Image" src="https://github.com/user-attachments/assets/999ac365-581a-4b9a-806e-05eb3e4cf44d" />
-
-根据上述输出获取到 CUDA 的安装目录，即 installdir 指向的位置。将 CUDA_PATH 加入系统环境变量，或在终端中输入：
-
-```powershell
-set CUDA_PATH=path_to_cuda_installdir
-```
-
-重新执行：
-
-```powershell
-xmake f --USE_CUDA=true
-xmake b -vy crossdesk
-```
-
-#### 注意
-
-运行时如果客户端状态栏显示 **未连接服务器**，请先在 [CrossDesk 官方网站](https://www.crossdesk.cn/) 安装客户端，以便在环境中安装所需的证书文件。
-
-<img width="256" height="120" alt="image" src="https://github.com/user-attachments/assets/1812f7d6-516b-4b4f-8a3d-98bee505cc5a" />
-
-### 关于 Xmake
-
-#### 安装 Xmake
-
-使用 curl：
-
-```bash
-curl -fsSL https://xmake.io/shget.text | bash
-```
-
-使用 wget：
-
-```bash
-wget https://xmake.io/shget.text -O - | bash
-```
-
-使用 powershell：
-
-```powershell
-irm https://xmake.io/psget.text | iex
-```
-
-#### 编译选项
-
-```text
-# 切换编译模式
-xmake f -m debug/release
-
-# 可选编译参数
--r ：重新构建目标
--v ：显示详细的构建日志
--y ：自动确认提示
-
-# 示例
-xmake b -vy crossdesk
-```
-
-#### 运行选项
-
-```bash
-# 使用调试模式运行
-xmake r -d crossdesk
-```
-
-更多使用方法可参考 [Xmake 官方文档](https://xmake.io/guide/quick-start.html)。
-
----
+<a id="self-hosting"></a>
 
 ## 自托管服务器
 
-### 服务端
+可自行部署信令服务与 TURN 中继，并在桌面客户端 **☰ → 设置 → 自托管配置** 中填写连接信息。控制端与被控端都需要启用同一套配置。
 
-推荐使用 Docker 部署 CrossDesk Server。
+- [自托管指南](docs/SELF_HOSTING.md)：当前 Compose 部署入口、客户端设置、证书信任与排查。
+- [CrossDesk Server](https://github.com/kunkundi/crossdesk-server)：服务端源码与发布配置。
+- [CrossDesk Web Client](https://github.com/kunkundi/crossdesk-web-client)：浏览器端源码与自托管说明。
 
-```bash
-sudo docker run -d \
-  --name crossdesk_server \
-  --network host \
-  -e EXTERNAL_IP=xxx.xxx.xxx.xxx \
-  -e INTERNAL_IP=xxx.xxx.xxx.xxx \
-  -e CROSSDESK_SERVER_PORT=xxxx \
-  -e COTURN_PORT=xxxx \
-  -e MIN_PORT=xxxxx \
-  -e MAX_PORT=xxxxx \
-  -v /var/lib/crossdesk:/var/lib/crossdesk \
-  -v /var/log/crossdesk:/var/log/crossdesk \
-  crossdesk/crossdesk-server:v1.1.6
-```
+## 开发与反馈
 
-上述命令中，用户需注意的参数如下：
+- [源码构建](docs/BUILD.md)：Windows、macOS、Linux、可选编译参数与打包。
+- [iOS 开发说明](apps/ios/README.md)：原生端构建和真机验证。
+- [GUI 架构](docs/gui-architecture.md)：桌面 UI、平台实现与工程结构。
+- [常见问题](docs/FAQ.md)：连接失败、黑屏、文件位置与编译问题。
+- [提交问题](https://github.com/kunkundi/crossdesk/issues)：请附上两端系统、客户端版本、连接方式和可复现步骤。
 
-#### 配置参数
+## 致谢与许可
 
-- EXTERNAL_IP：服务器公网 IP , 对应 CrossDesk 客户端**自托管服务器配置**中填写的**服务器地址**
-- INTERNAL_IP：服务器内网 IP
-- CROSSDESK_SERVER_PORT：自托管服务使用的端口，对应 CrossDesk 客户端**自托管服务器配置**中填写的**服务器端口**
-- COTURN_PORT: COTURN 服务使用的端口, 对应 CrossDesk 客户端**自托管服务器配置**中填写的**中继服务端口**
-- MIN_PORT/MAX_PORT：COTURN 服务使用的端口范围，例如：MIN_PORT=50000, MAX_PORT=60000，范围可根据客户端数量调整。
-- `-v /var/lib/crossdesk:/var/lib/crossdesk`：持久化数据库和证书文件到宿主机
-- `-v /var/log/crossdesk:/var/log/crossdesk`：持久化日志文件到宿主机
+感谢 [HelloGitHub](https://hellogithub.com/)、[阮一峰的科技爱好者周刊](https://github.com/ruanyf/weekly) 与 [LinuxDo](https://linux.do) 社区的推荐、交流与支持。
 
-#### 部署示例
+CrossDesk 使用 [GPL-3.0](LICENSE) 许可。隐私说明见 [隐私政策](PRIVACY.md#中文)。
 
-```bash
-sudo docker run -d \
-  --name crossdesk_server \
-  --network host \
-  -e EXTERNAL_IP=114.114.114.114 \
-  -e INTERNAL_IP=10.0.0.1 \
-  -e CROSSDESK_SERVER_PORT=9099 \
-  -e COTURN_PORT=3478 \
-  -e MIN_PORT=50000 \
-  -e MAX_PORT=60000 \
-  -v /var/lib/crossdesk:/var/lib/crossdesk \
-  -v /var/log/crossdesk:/var/log/crossdesk \
-  crossdesk/crossdesk-server:v1.1.6
-```
-
-#### 注意事项
-
-- **服务器需开放端口：COTURN_PORT/udp，COTURN_PORT/tcp，MIN_PORT-MAX_PORT/udp，CROSSDESK_SERVER_PORT/tcp。**
-- 如果不挂载 volume，容器删除后数据会丢失
-- 证书文件会在首次启动时自动生成并持久化到宿主机的 `/var/lib/crossdesk/certs` 路径下。由于默认使用的是自签证书，无法保障安全性，建议在云服务商申请正式证书放到该目录下并重启服务。
-- 数据库文件会自动创建并持久化到宿主机的 `/var/lib/crossdesk/db/crossdesk-server.db` 路径下
-- 日志文件会自动创建并持久化到宿主机的 `/var/log/crossdesk/` 路径下
-
-#### 目录权限
-
-如果 Docker 自动创建的目录权限不足（属于 root），容器内用户无法写入，会导致：
-
-- 证书生成失败，容器启动脚本会报错退出
-- 数据库目录创建失败，程序会抛出异常并崩溃
-- 日志目录创建失败，日志文件无法写入（但程序可能继续运行）
-
-在启动容器前手动设置权限：
-
-```bash
-sudo mkdir -p /var/lib/crossdesk /var/log/crossdesk
-sudo chown -R $(id -u):$(id -g) /var/lib/crossdesk /var/log/crossdesk
-```
-
-### 客户端
-
-1. 点击右上角设置进入设置页面。<br><br>
-<img width="600" height="210" alt="image" src="https://github.com/user-attachments/assets/6431131d-b32a-4726-8783-6788f47baa3b" /><br>
-
-2. 点击`自托管服务器配置`按钮。<br><br>
-<img width="600" height="160" alt="image" src="https://github.com/user-attachments/assets/24c761a3-1985-4d7e-84be-787383c2afb8" /><br>
-
-3. 输入`服务器地址`(**EXTERNAL_IP**)、`信令服务端口`(**CROSSDESK_SERVER_PORT**)、`中继服务端口`(**COTURN_PORT**)，点击确认按钮。
-
-4. 勾选`自托管服务器配置`选项，点击确认按钮保存设置。如果服务端使用的是正式证书，则到此步骤为止，客户端即可显示已连接服务器。
-
-5. 如果使用默认证书（正式证书忽略此步骤），则需要将服务端`/var/lib/crossdesk/certs/`目录下的`api.crossdesk.cn_root.crt`自签根证书下载到运行客户端的机器，并执行下述命令安装证书：
-
-**Windows：** 使用管理员权限打开 PowerShell 执行：
-
-```powershell
-certutil -addstore "Root" "C:\path\to\api.crossdesk.cn_root.crt"
-```
-
-**Linux：**
-
-```bash
-sudo cp /path/to/api.crossdesk.cn_root.crt /usr/local/share/ca-certificates/api.crossdesk.cn_root.crt
-sudo update-ca-certificates
-```
-
-**macOS：**
-
-```bash
-sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain path/to/api.crossdesk.cn_root.crt
-```
-
-### 自托管 Web 客户端
-
-详情见项目 [CrossDesk Web Client](https://github.com/kunkundi/crossdesk-web-client)。
-
----
-
-## 常见问题
-
-见 [常见问题](https://github.com/kunkundi/crossdesk/blob/self-hosted-server/docs/FAQ.md)。
-
----
-
-## 致谢
-
-- 感谢 [HelloGitHub](https://hellogithub.com/) 的推荐与关注。
-- 感谢 [阮一峰的科技爱好者周刊](https://github.com/ruanyf/weekly) 的收录与推荐。
-- 感谢 [LinuxDo](https://linux.do) 社区的关注、交流与支持，为 CrossDesk 项目的完善提供了帮助。
-
----
-
-## Code signing policy
+### Code signing policy
 
 CrossDesk 使用 SignPath.io 为本仓库构建的官方 Windows 发布包提供代码签名。
 
@@ -431,4 +213,3 @@ CrossDesk 使用 SignPath.io 为本仓库构建的官方 Windows 发布包提供
 
 - **Committers and reviewers（代码提交与审核）：** [kunkundi](https://github.com/kunkundi)
 - **Approvers（签名审批）：** [kunkundi](https://github.com/kunkundi)
-- **隐私政策：** [查看 CrossDesk 隐私政策](PRIVACY.md#中文)

@@ -6,6 +6,7 @@
 #include <charconv>
 #include <cstdlib>
 #include <fstream>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -44,6 +45,7 @@ struct CaptureOptions {
   std::string page;
   int language = 0;
   std::string snapshot_path;
+  std::string demo_assets_path;
 };
 
 // Compatibility entry point for the former application-level debug capture
@@ -98,7 +100,53 @@ CaptureOptions LoadCaptureOptions() {
           std::getenv("CROSSDESK_UI_CAPTURE_SNAPSHOT")) {
     options.snapshot_path = snapshot;
   }
+  if (const char *assets = std::getenv("CROSSDESK_UI_CAPTURE_DEMO_ASSETS")) {
+    options.demo_assets_path = assets;
+  }
   return options;
+}
+
+// Opt-in documentation data, separate from the smoke test's baseline state.
+// The images are public page captures, never a user's cached remote desktops.
+bool ConfigureDocumentationDemo(
+    const slint::ComponentHandle<crossdesk::ui::MainWindow> &window,
+    const CaptureOptions &options) {
+  if (options.demo_assets_path.empty()) {
+    return true;
+  }
+  struct DemoDevice {
+    const char *id;
+    const char *name;
+    const char *thumbnail;
+  };
+  const DemoDevice devices[] = {
+      {"987654321", "Dev Workstation", "fixtures/source.png"},
+      {"246813579", "Office PC", "fixtures/website.png"},
+      {"135792468", "Home Laptop", "web-client.png"},
+  };
+  std::vector<crossdesk::ui::RecentConnection> connections;
+  for (const auto &device : devices) {
+    const std::string path = options.demo_assets_path + "/" + device.thumbnail;
+    const auto thumbnail =
+        slint::Image::load_from_path(slint::SharedString(path.c_str()));
+    if (thumbnail.size().width == 0 || thumbnail.size().height == 0) {
+      std::cerr << "Missing documentation thumbnail: " << path << '\n';
+      return false;
+    }
+    crossdesk::ui::RecentConnection connection;
+    connection.remote_id = device.id;
+    connection.display_name = device.name;
+    connection.host_name = device.name;
+    connection.online = true;
+    connection.thumbnail = thumbnail;
+    connections.emplace_back(std::move(connection));
+  }
+  window->set_recent_connections(
+      std::make_shared<slint::VectorModel<crossdesk::ui::RecentConnection>>(
+          std::move(connections)));
+  window->set_signal_connected(true);
+  window->set_hardware_codec_available(true);
+  return true;
 }
 
 bool HasNonEmptyEnvironmentVariable(const char *name) {
@@ -306,6 +354,9 @@ int RunCaptureMode(
     slint::ComponentHandle<crossdesk::ui::StreamWindow> &stream,
     slint::ComponentHandle<crossdesk::ui::ServerWindow> &server) {
   ConfigureMainCapturePage(window, options);
+  if (!ConfigureDocumentationDemo(window, options)) {
+    return 8;
+  }
   stream->hide();
   server->hide();
 
