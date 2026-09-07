@@ -381,6 +381,7 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
     @Published private(set) var remoteCursorVisible = true
     @Published private(set) var remoteCursorShape = 0
     @Published private(set) var remoteCursorPosition: CGPoint?
+    @Published private(set) var remoteCursorPositionRevision: UInt64 = 0
     @Published private(set) var remoteCursorVisualOffset = CGPoint.zero
     @Published private(set) var hasRemoteCursorState = false
     @Published private(set) var bitrate: UInt = 0
@@ -775,6 +776,7 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
         remoteCursorVisible = true
         remoteCursorShape = 0
         remoteCursorPosition = nil
+        remoteCursorPositionRevision &+= 1
         remoteCursorVisualOffset = .zero
         hasRemoteCursorState = false
         remoteCursorSequence = nil
@@ -991,6 +993,7 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
             } else {
                 remoteCursorPosition = nil
             }
+            remoteCursorPositionRevision &+= 1
         }
         hasRemoteCursorState = true
     }

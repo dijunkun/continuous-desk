@@ -58,6 +58,7 @@ struct RemoteTouchInputView: UIViewRepresentable {
     let videoSize: CGSize
     let controlMode: MouseControlMode
     let remoteCursorPosition: CGPoint?
+    let remoteCursorPositionRevision: UInt64
     let viewportScale: CGFloat
     let viewportOffset: CGSize
     let viewportChanged: (CGFloat, CGSize) -> Void
@@ -81,7 +82,8 @@ struct RemoteTouchInputView: UIViewRepresentable {
         view.onLeftUp = leftUp
         view.onRightClick = rightClick
         view.onScroll = scroll
-        view.synchronizeRemoteCursor(remoteCursorPosition)
+        view.synchronizeRemoteCursor(remoteCursorPosition,
+                                     revision: remoteCursorPositionRevision)
     }
 }
 
@@ -108,6 +110,7 @@ final class RemoteTouchSurface: UIView, UIGestureRecognizerDelegate {
 
     private var relativeCursorPoint: (Float, Float) = (0.5, 0.5)
     private var lastRemoteCursorPoint: (Float, Float)?
+    private var lastRemoteCursorRevision: UInt64?
     private var relativePanActive = false
     private var heldDragPoint: (Float, Float)?
     private var heldDragLastLocation: CGPoint?
@@ -184,7 +187,12 @@ final class RemoteTouchSurface: UIView, UIGestureRecognizerDelegate {
         viewportOffset = constrainedViewportOffset(offset, scale: nextScale)
     }
 
-    func synchronizeRemoteCursor(_ position: CGPoint?) {
+    func synchronizeRemoteCursor(_ position: CGPoint?, revision: UInt64) {
+        // SwiftUI refreshes this view for video frames and shape-only feedback
+        // too. Consume each position update once, even when it arrives during
+        // local movement, so a later refresh cannot restore an old coordinate.
+        guard revision != lastRemoteCursorRevision else { return }
+        lastRemoteCursorRevision = revision
         guard let position else {
             lastRemoteCursorPoint = nil
             return
@@ -194,7 +202,11 @@ final class RemoteTouchSurface: UIView, UIGestureRecognizerDelegate {
             Float(min(max(position.y, 0), 1))
         )
         lastRemoteCursorPoint = point
-        applyRemoteCursorIfIdle()
+        guard controlMode == .relative,
+              !relativePanActive,
+              heldDragPoint == nil,
+              hoverLastLocation == nil else { return }
+        relativeCursorPoint = point
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
@@ -400,7 +412,6 @@ final class RemoteTouchSurface: UIView, UIGestureRecognizerDelegate {
             }
         default:
             relativePanActive = false
-            applyRemoteCursorIfIdle()
         }
     }
 
@@ -429,7 +440,6 @@ final class RemoteTouchSurface: UIView, UIGestureRecognizerDelegate {
             }
             heldDragPoint = nil
             heldDragLastLocation = nil
-            applyRemoteCursorIfIdle()
         default:
             break
         }
@@ -455,14 +465,6 @@ final class RemoteTouchSurface: UIView, UIGestureRecognizerDelegate {
             Float(min(max(nextY, 0), 1))
         )
         return relativeCursorPoint
-    }
-
-    private func applyRemoteCursorIfIdle() {
-        guard controlMode == .relative,
-              !relativePanActive,
-              heldDragPoint == nil,
-              let point = lastRemoteCursorPoint else { return }
-        relativeCursorPoint = point
     }
 
     private func normalized(_ point: CGPoint) -> (Float, Float)? {

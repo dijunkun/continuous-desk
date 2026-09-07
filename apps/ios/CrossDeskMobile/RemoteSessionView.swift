@@ -79,6 +79,7 @@ struct RemoteSessionView: View {
                         videoSize: session.displayGeometrySize,
                         controlMode: session.mouseControlMode,
                         remoteCursorPosition: session.remoteCursorPosition,
+                        remoteCursorPositionRevision: session.remoteCursorPositionRevision,
                         viewportScale: viewport.scale,
                         viewportOffset: viewport.offset,
                         viewportChanged: { scale, offset in
@@ -161,8 +162,8 @@ struct RemoteSessionView: View {
         .onChange(of: session.mouseControlMode) { _ in
             cursorPosition = session.remoteCursorPosition
         }
-        .onChange(of: session.remoteCursorPosition) { position in
-            guard let position else { return }
+        .onChange(of: session.remoteCursorPositionRevision) { _ in
+            guard let position = session.remoteCursorPosition else { return }
             cursorPosition = position
         }
         .fileImporter(isPresented: $showingFileImporter,
