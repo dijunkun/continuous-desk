@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <deque>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -62,6 +63,11 @@ struct CallbackContext {
   uint64_t generation = 0;
 };
 
+struct PresenceRequest {
+  uint64_t generation;
+  bool subscription;
+};
+
 struct RTCState {
   PeerPtr *identity_peer = nullptr;
   PeerPtr *controller_peer = nullptr;
@@ -75,6 +81,7 @@ struct RTCState {
   VideoDegradationPreference video_adaptation_policy =
       VideoDegradationPreference::MaintainResolution;
   bool identity_ready = false;
+  std::deque<PresenceRequest> presence_requests;
   bool identity_recovery_attempted = false;
   std::string identity_with_password;
   std::string identity_base;
@@ -192,11 +199,15 @@ void DispatchMain(dispatch_block_t block) {
 }  // namespace
 
 @interface CrossDeskRTCBridge ()
-- (void)handleSignalState:(CrossDeskSignalState)state role:(PeerRole)role;
+- (void)handleSignalState:(CrossDeskSignalState)state
+                     role:(PeerRole)role
+               generation:(uint64_t)generation;
 - (void)handleSignalMessage:(const char *)message
                        size:(size_t)size
-                       role:(PeerRole)role;
-- (void)handleProvisionedIdentity:(const std::string &)identity;
+                       role:(PeerRole)role
+                 generation:(uint64_t)generation;
+- (void)handleProvisionedIdentity:(const std::string &)identity
+                       generation:(uint64_t)generation;
 - (void)handleConnectionState:(CrossDeskConnectionState)state
                       remoteID:(const std::string &)remoteID
                     generation:(uint64_t)generation;
@@ -271,7 +282,8 @@ void OnSignalState(SignalStatus status, const char *, size_t, void *user_data) {
       (context->role == PeerRole::Identity ||
        [owner isControllerGenerationActive:context->generation])) {
     [owner handleSignalState:static_cast<CrossDeskSignalState>(status)
-                        role:context->role];
+                        role:context->role
+                  generation:context->generation];
   }
 }
 
@@ -279,7 +291,8 @@ void OnSignalMessage(const char *message, size_t size, void *user_data) {
   auto *context = static_cast<CallbackContext *>(user_data);
   CrossDeskRTCBridge *owner = context ? context->owner : nil;
   if (owner && message && size > 0) {
-    [owner handleSignalMessage:message size:size role:context->role];
+    [owner handleSignalMessage:message size:size role:context->role
+                     generation:context->generation];
   }
 }
 
@@ -305,7 +318,8 @@ void OnNetworkStats(const char *peer_id, size_t peer_id_size,
   if (!owner) return;
   if (context->role == PeerRole::Identity && mode == TraversalMode::UnknownMode &&
       peer_id && peer_id_size > 0) {
-    [owner handleProvisionedIdentity:std::string(peer_id, peer_id_size)];
+    [owner handleProvisionedIdentity:std::string(peer_id, peer_id_size)
+                           generation:context->generation];
   } else if (context->role == PeerRole::Controller && stats &&
              [owner isControllerGenerationActive:context->generation]) {
     [owner handleStats:stats mode:mode];
@@ -370,6 +384,9 @@ Params MakeParams(const RTCState &state, const std::string &user_id,
   std::atomic<uint64_t> _receivedVideoFrames;
   std::atomic<uint64_t> _controllerGenerationCounter;
   std::atomic<uint64_t> _activeControllerGeneration;
+  std::atomic<uint64_t> _identityGeneration;
+  std::atomic<uint64_t> _signalGeneration;
+  std::atomic<uint64_t> _presenceGeneration;
 }
 
 - (instancetype)init {
@@ -396,6 +413,9 @@ Params MakeParams(const RTCState &state, const std::string &user_id,
     _receivedVideoFrames.store(0);
     _controllerGenerationCounter.store(0);
     _activeControllerGeneration.store(0);
+    _identityGeneration.store(0);
+    _signalGeneration.store(0);
+    _presenceGeneration.store(0);
   }
   return self;
 }
@@ -517,10 +537,17 @@ Params MakeParams(const RTCState &state, const std::string &user_id,
   });
 }
 
-- (void)requestPresenceForRemoteIDs:(NSArray<NSString *> *)remoteIDs {
+- (void)invalidatePresence {
+  _presenceGeneration.fetch_add(1);
+}
+
+- (void)requestPresenceForRemoteIDs:(NSArray<NSString *> *)remoteIDs
+                         subscribe:(BOOL)subscribe {
   NSArray<NSString *> *owned_ids = [remoteIDs copy];
+  const uint64_t generation = _presenceGeneration.load();
   dispatch_async(_rtcQueue, ^{
-    if (!self->_state->identity_peer || !self->_state->identity_ready ||
+    if (generation != self->_presenceGeneration.load() ||
+        !self->_state->identity_peer || !self->_state->identity_ready ||
         self->_state->identity_base.empty()) {
       return;
     }
@@ -540,14 +567,19 @@ Params MakeParams(const RTCState &state, const std::string &user_id,
       @"type" : @"recent_connections_presence",
       @"user_id" : user_id ?: @"",
       @"devices" : devices,
+      @"subscribe" : @(subscribe),
     };
     NSData *payload = [NSJSONSerialization dataWithJSONObject:request
                                                       options:0
                                                         error:nil];
     if (!payload) return;
-    SendSignalMessage(self->_state->identity_peer,
-                      static_cast<const char *>(payload.bytes),
-                      payload.length);
+    if (SendSignalMessage(self->_state->identity_peer,
+                           static_cast<const char *>(payload.bytes),
+                           payload.length) == 0) {
+      // Both old and new servers return snapshots in request order. Retain the
+      // epoch so a pre-foreground response cannot satisfy a fresh query.
+      self->_state->presence_requests.push_back({generation, bool(subscribe)});
+    }
   });
 }
 
@@ -832,13 +864,15 @@ Params MakeParams(const RTCState &state, const std::string &user_id,
 
 - (void)createIdentityPeer {
   if (_state->identity_peer || _state->signal_host.empty()) return;
+  _state->identity_context.generation = _identityGeneration.fetch_add(1) + 1;
   Params params = MakeParams(*_state, _state->identity_with_password,
                              &_state->identity_context);
   _state->identity_peer = CreatePeer(&params);
   if (!_state->identity_peer || Init(_state->identity_peer) != 0) {
     [self destroyIdentityPeer];
     [self handleSignalState:CrossDeskSignalStateFailed
-                       role:PeerRole::Identity];
+                       role:PeerRole::Identity
+                 generation:_identityGeneration.load()];
   }
 }
 
@@ -890,6 +924,9 @@ Params MakeParams(const RTCState &state, const std::string &user_id,
 }
 
 - (void)destroyIdentityPeer {
+  _identityGeneration.fetch_add(1);
+  _presenceGeneration.fetch_add(1);
+  _state->presence_requests.clear();
   if (_state->identity_peer) {
     DestroyPeer(&_state->identity_peer);
   }
@@ -920,8 +957,19 @@ Params MakeParams(const RTCState &state, const std::string &user_id,
   [self resetVideoDelivery];
 }
 
-- (void)handleSignalState:(CrossDeskSignalState)state role:(PeerRole)role {
+- (void)handleSignalState:(CrossDeskSignalState)state
+                     role:(PeerRole)role
+               generation:(uint64_t)generation {
+  // Only the long-lived identity peer drives presence and the home indicator.
+  if (role != PeerRole::Identity || generation != _identityGeneration.load()) {
+    return;
+  }
+  const uint64_t signal_generation = _signalGeneration.fetch_add(1) + 1;
+  _presenceGeneration.fetch_add(1);
   dispatch_async(_rtcQueue, ^{
+    if (generation != self->_identityGeneration.load() ||
+        signal_generation != self->_signalGeneration.load()) return;
+    self->_state->presence_requests.clear();
     if (role == PeerRole::Identity) {
       self->_state->identity_ready = state == CrossDeskSignalStateConnected;
       if (state == CrossDeskSignalStateFailed &&
@@ -954,6 +1002,8 @@ Params MakeParams(const RTCState &state, const std::string &user_id,
     // its shutdown would incorrectly make the server look disconnected.
     if (role == PeerRole::Identity) {
       DispatchMain(^{
+        if (generation != self->_identityGeneration.load() ||
+            signal_generation != self->_signalGeneration.load()) return;
         id<CrossDeskRTCBridgeDelegate> delegate = self.delegate;
         if ([delegate respondsToSelector:
                 @selector(rtcBridge:didChangeSignalState:)]) {
@@ -966,12 +1016,17 @@ Params MakeParams(const RTCState &state, const std::string &user_id,
 
 - (void)handleSignalMessage:(const char *)message
                        size:(size_t)size
-                       role:(PeerRole)role {
+                       role:(PeerRole)role
+                 generation:(uint64_t)generation {
   constexpr size_t kMaxPresenceMessageSize = 256 * 1024;
-  if (role != PeerRole::Identity || !message || size == 0 ||
+  if (role != PeerRole::Identity || generation != _identityGeneration.load() ||
+      !message || size == 0 ||
       size > kMaxPresenceMessageSize) {
     return;
   }
+
+  const uint64_t signal_generation = _signalGeneration.load();
+  const uint64_t presence_generation = _presenceGeneration.load();
 
   NSData *payload = [NSData dataWithBytes:message length:size];
   id decoded = [NSJSONSerialization JSONObjectWithData:payload
@@ -1007,22 +1062,41 @@ Params MakeParams(const RTCState &state, const std::string &user_id,
   } else {
     return;
   }
-  if (presence.count == 0) return;
-
   NSDictionary<NSString *, NSNumber *> *result = [presence copy];
-  DispatchMain(^{
-    id<CrossDeskRTCBridgeDelegate> delegate = self.delegate;
-    if ([delegate respondsToSelector:
-            @selector(rtcBridge:didReceivePresence:)]) {
-      [delegate rtcBridge:self didReceivePresence:result];
+  const bool response = [type isEqualToString:@"presence"];
+  dispatch_async(_rtcQueue, ^{
+    if (generation != self->_identityGeneration.load() ||
+        signal_generation != self->_signalGeneration.load() ||
+        !self->_state->identity_ready) return;
+    uint64_t delivery_generation = presence_generation;
+    BOOL snapshot = NO;
+    if (response) {
+      if (self->_state->presence_requests.empty()) return;
+      const auto request = self->_state->presence_requests.front();
+      self->_state->presence_requests.pop_front();
+      delivery_generation = request.generation;
+      snapshot = request.subscription;
     }
+    if (delivery_generation != self->_presenceGeneration.load()) return;
+    DispatchMain(^{
+      if (generation != self->_identityGeneration.load() ||
+          signal_generation != self->_signalGeneration.load() ||
+          delivery_generation != self->_presenceGeneration.load()) return;
+      id<CrossDeskRTCBridgeDelegate> delegate = self.delegate;
+      if ([delegate respondsToSelector:
+              @selector(rtcBridge:didReceivePresence:snapshot:)]) {
+        [delegate rtcBridge:self didReceivePresence:result snapshot:snapshot];
+      }
+    });
   });
 }
 
-- (void)handleProvisionedIdentity:(const std::string &)identity {
+- (void)handleProvisionedIdentity:(const std::string &)identity
+                       generation:(uint64_t)generation {
   if (identity.empty()) return;
   const std::string identity_copy = identity;
   dispatch_async(_rtcQueue, ^{
+    if (generation != self->_identityGeneration.load()) return;
     self->_state->identity_with_password = identity_copy;
     self->_state->identity_base = BaseIdentity(identity_copy);
     NSString *host = [NSString stringWithUTF8String:
@@ -1038,6 +1112,7 @@ Params MakeParams(const RTCState &state, const std::string &user_id,
       [[NSUserDefaults standardUserDefaults] removeObjectForKey:key];
     }
     DispatchMain(^{
+      if (generation != self->_identityGeneration.load()) return;
       id<CrossDeskRTCBridgeDelegate> delegate = self.delegate;
       if ([delegate respondsToSelector:@selector(rtcBridge:didProvisionIdentity:)]) {
         [delegate rtcBridge:self didProvisionIdentity:value];

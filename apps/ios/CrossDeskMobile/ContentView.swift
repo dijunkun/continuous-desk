@@ -28,6 +28,8 @@ struct ContentView: View {
         .onChange(of: scenePhase) { phase in
             if phase == .active {
                 session.refreshRecentConnectionPresenceAfterForeground()
+            } else if phase == .background {
+                session.suspendPresenceMonitoring()
             }
         }
     }

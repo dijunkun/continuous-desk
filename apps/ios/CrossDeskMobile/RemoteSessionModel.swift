@@ -409,6 +409,23 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
     private var remoteCursorSequence: UInt32?
     private var pendingPresenceRemoteID: String?
     private var presenceProbeGeneration: UInt64 = 0
+    private var signalConnected = false
+    private var presenceIsForeground = false
+    private var awaitingPresenceSnapshot = true
+    private var presenceUpdatedAt: [String: ContinuousClock.Instant] = [:]
+    private var lastPresenceRefreshAt: ContinuousClock.Instant?
+    private var presenceTimer: Timer?
+    private let presenceClock = ContinuousClock()
+    private static let presenceRefreshInterval: Duration = .seconds(30)
+    private static let presenceMaxAge: Duration = .seconds(60)
+
+    private struct BridgeConfiguration: Equatable {
+        let host: String
+        let signalPort: Int
+        let turnPort: Int
+        let enableSRTP: Bool
+    }
+    private var bridgeConfiguration: BridgeConfiguration?
 
     var pixelBuffer: CVPixelBuffer? { videoFrame?.pixelBuffer }
     var frameSize: CGSize { videoFrame?.encodedSize ?? .zero }
@@ -426,18 +443,38 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
         configureBridge()
     }
 
-    func configureBridge() {
+    deinit {
+        presenceTimer?.invalidate()
+    }
+
+    @discardableResult
+    func configureBridge() -> Bool {
+        let host = signalHost.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let signal = Int(signalPort), let turn = Int(turnPort),
-              !signalHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+              (1...65535).contains(signal), (1...65535).contains(turn),
+              !host.isEmpty else {
             signalStatus = "服务器配置无效"
-            return
+            return false
+        }
+        let configuration = BridgeConfiguration(host: host, signalPort: signal,
+                                                turnPort: turn, enableSRTP: enableSRTP)
+        if bridgeConfiguration != configuration {
+            bridgeConfiguration = configuration
+            signalConnected = false
+            signalStatus = "正在连接信令服务"
+            stopPresenceMonitoring()
+            invalidatePresence()
+            cancelPendingPresenceConnection()
+        } else if signalConnected {
+            signalStatus = "已连接服务器"
         }
         bridge.setHardwareAccelerationEnabled(videoCodecMode == .hardware)
         bridge.setVideoAdaptationPolicy(videoAdaptationPolicy.bridgeValue)
-        bridge.configure(withSignalHost: signalHost,
+        bridge.configure(withSignalHost: host,
                          signalPort: signal,
                          turnPort: turn,
                          enableSRTP: enableSRTP)
+        return true
     }
 
     func connect(password: String, rememberPassword: Bool) {
@@ -453,8 +490,11 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
             return
         }
         remoteID = identifier
-        configureBridge()
-        if recentConnectionPresence[identifier] == true {
+        guard configureBridge() else {
+            connectionStatus = signalStatus
+            return
+        }
+        if isDeviceOnline(identifier) {
             beginRemoteConnection(identifier)
         } else {
             beginPresenceProbe(identifier)
@@ -477,7 +517,7 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
     }
 
     private func beginPresenceProbe(_ identifier: String) {
-        guard signalStatus == "已连接服务器" else {
+        guard signalConnected, presenceIsForeground else {
             showDeviceOffline()
             return
         }
@@ -489,7 +529,7 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
         isConnected = false
         sessionVisible = false
         connectionStatus = "正在确认设备状态…"
-        bridge.requestPresence(remoteIDs: [identifier])
+        requestPresenceProbe(identifier)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
             guard let self,
@@ -506,6 +546,21 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
     private func cancelPresenceProbe() {
         presenceProbeGeneration &+= 1
         pendingPresenceRemoteID = nil
+    }
+
+    private func cancelPendingPresenceConnection() {
+        guard pendingPresenceRemoteID != nil else { return }
+        cancelPresenceProbe()
+        isConnecting = false
+        connectionStatus = "未连接"
+    }
+
+    private func requestPresenceProbe(_ identifier: String) {
+        guard signalConnected, presenceIsForeground else { return }
+        // Older servers ignore subscribe=false and replace the watched list.
+        var identifiers = recentConnections.map(\.remoteID)
+        if !identifiers.contains(identifier) { identifiers.append(identifier) }
+        bridge.requestPresence(remoteIDs: identifiers, subscribe: false)
     }
 
     private func showDeviceOffline() {
@@ -569,29 +624,85 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
     }
 
     func isRecentConnectionOnline(_ connection: RecentConnection) -> Bool {
-        recentConnectionPresence[connection.remoteID] == true
+        isDeviceOnline(connection.remoteID)
+    }
+
+    private func isDeviceOnline(_ identifier: String) -> Bool {
+        guard signalConnected, presenceIsForeground, !awaitingPresenceSnapshot,
+              recentConnectionPresence[identifier] == true,
+              let updatedAt = presenceUpdatedAt[identifier] else { return false }
+        return updatedAt.duration(to: presenceClock.now) < Self.presenceMaxAge
     }
 
     private func refreshRecentConnectionPresence() {
-        bridge.requestPresence(remoteIDs: recentConnections.map(\.remoteID))
+        guard signalConnected, presenceIsForeground else { return }
+        lastPresenceRefreshAt = presenceClock.now
+        bridge.requestPresence(remoteIDs: recentConnections.map(\.remoteID),
+                               subscribe: true)
+    }
+
+    private func invalidatePresence() {
+        bridge.invalidatePresence()
+        recentConnectionPresence = [:]
+        presenceUpdatedAt = [:]
+        awaitingPresenceSnapshot = true
+        lastPresenceRefreshAt = nil
+    }
+
+    private func startPresenceMonitoring() {
+        guard signalConnected, presenceIsForeground, presenceTimer == nil else { return }
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            self?.maintainPresence()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        presenceTimer = timer
+    }
+
+    private func stopPresenceMonitoring() {
+        presenceTimer?.invalidate()
+        presenceTimer = nil
+    }
+
+    private func maintainPresence() {
+        guard signalConnected, presenceIsForeground else { return }
+        let now = presenceClock.now
+        let expired = presenceUpdatedAt.compactMap { identifier, updatedAt in
+            updatedAt.duration(to: now) >= Self.presenceMaxAge ? identifier : nil
+        }
+        if !expired.isEmpty {
+            var updated = recentConnectionPresence
+            for identifier in expired {
+                updated.removeValue(forKey: identifier)
+                presenceUpdatedAt.removeValue(forKey: identifier)
+            }
+            recentConnectionPresence = updated
+        }
+        if lastPresenceRefreshAt.map({ $0.duration(to: now) >= Self.presenceRefreshInterval }) ?? true {
+            refreshRecentConnectionPresence()
+        }
+    }
+
+    func suspendPresenceMonitoring() {
+        presenceIsForeground = false
+        stopPresenceMonitoring()
+        invalidatePresence()
+        cancelPendingPresenceConnection()
     }
 
     func refreshRecentConnectionPresenceAfterForeground() {
-        // iOS can suspend the process while it is in the background, so presence
-        // updates received during that time are missed. Treat cached values as
-        // unknown (and therefore offline, like the desktop client) until the
-        // signaling server returns a fresh snapshot.
-        recentConnectionPresence = [:]
+        presenceIsForeground = true
+        invalidatePresence()
+        startPresenceMonitoring()
+        refreshRecentConnectionPresence()
         if let pendingPresenceRemoteID {
-            bridge.requestPresence(remoteIDs: [pendingPresenceRemoteID])
-        } else {
-            refreshRecentConnectionPresence()
+            requestPresenceProbe(pendingPresenceRemoteID)
         }
     }
 
     func removeRecentConnection(_ connection: RecentConnection) {
         recentConnections.removeAll { $0.remoteID == connection.remoteID }
         recentConnectionPresence.removeValue(forKey: connection.remoteID)
+        presenceUpdatedAt.removeValue(forKey: connection.remoteID)
         RecentConnectionStore.save(recentConnections)
         RecentConnectionStore.removeThumbnail(fileName: connection.thumbnailFileName)
         ConnectionCredentialStore.removePassword(for: connection.remoteID)
@@ -621,7 +732,6 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
         )
         recentConnections.removeAll { $0.remoteID == activeRemoteID }
         recentConnections.insert(connection, at: 0)
-        recentConnectionPresence[activeRemoteID] = true
         RecentConnectionStore.save(recentConnections)
         refreshRecentConnectionPresence()
     }
@@ -706,6 +816,8 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
 
     func rtcBridge(_ bridge: CrossDeskRTCBridge,
                    didChange state: CrossDeskSignalState) {
+        signalConnected = state.rawValue == 1
+        invalidatePresence()
         switch state.rawValue {
         case 0: signalStatus = "正在连接信令服务"
         case 1: signalStatus = "已连接服务器"
@@ -716,12 +828,15 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
         case 6: signalStatus = "TLS 证书校验失败"
         default: signalStatus = "未知信令状态"
         }
-        if state.rawValue == 1 {
+        if signalConnected {
+            startPresenceMonitoring()
+            refreshRecentConnectionPresence()
             if let pendingPresenceRemoteID {
-                bridge.requestPresence(remoteIDs: [pendingPresenceRemoteID])
-            } else {
-                refreshRecentConnectionPresence()
+                requestPresenceProbe(pendingPresenceRemoteID)
             }
+        } else {
+            stopPresenceMonitoring()
+            cancelPendingPresenceConnection()
         }
     }
 
@@ -734,9 +849,6 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
         case 0: connectionStatus = "正在建立远程连接"
         case 1:
             connectionStatus = "已连接"
-            if !remoteID.isEmpty {
-                recentConnectionPresence[remoteID] = true
-            }
             sessionVisible = true
             recordSuccessfulConnectionIfNeeded()
             audioPlayer.setEnabled(audioEnabled)
@@ -760,6 +872,7 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
             connectionStatus = "远程设备 ID 不存在"
             if !remoteID.isEmpty {
                 recentConnectionPresence[remoteID] = false
+                presenceUpdatedAt.removeValue(forKey: remoteID)
             }
             sessionVisible = false
             AppOrientation.update(to: .portrait)
@@ -767,6 +880,7 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
             connectionStatus = "远程设备当前不可用"
             if !remoteID.isEmpty {
                 recentConnectionPresence[remoteID] = false
+                presenceUpdatedAt.removeValue(forKey: remoteID)
             }
             sessionVisible = false
             AppOrientation.update(to: .portrait)
@@ -776,18 +890,28 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
 
     func rtcBridge(_ bridge: CrossDeskRTCBridge, didProvisionIdentity identity: String) {
         localIdentity = identity.split(separator: "@").first.map(String.init) ?? identity
+        refreshRecentConnectionPresence()
         if let pendingPresenceRemoteID {
-            bridge.requestPresence(remoteIDs: [pendingPresenceRemoteID])
-        } else {
-            refreshRecentConnectionPresence()
+            requestPresenceProbe(pendingPresenceRemoteID)
         }
     }
 
     func rtcBridge(_ bridge: CrossDeskRTCBridge,
-                   didReceivePresence presence: [String: NSNumber]) {
-        var updated = recentConnectionPresence
-        for (remoteID, online) in presence {
+                   didReceivePresence presence: [String: NSNumber],
+                   snapshot: Bool) {
+        guard signalConnected, presenceIsForeground,
+              snapshot || !awaitingPresenceSnapshot else { return }
+        var updated = snapshot ? [:] : recentConnectionPresence
+        if snapshot {
+            presenceUpdatedAt = [:]
+            awaitingPresenceSnapshot = false
+        }
+        let now = presenceClock.now
+        let watched = Set(recentConnections.map(\.remoteID))
+        for (remoteID, online) in presence
+            where watched.contains(remoteID) || pendingPresenceRemoteID == remoteID {
             updated[remoteID] = online.boolValue
+            presenceUpdatedAt[remoteID] = now
         }
         recentConnectionPresence = updated
 

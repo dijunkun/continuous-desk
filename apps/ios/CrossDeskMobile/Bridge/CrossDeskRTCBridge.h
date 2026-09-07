@@ -61,7 +61,8 @@ typedef NS_ENUM(NSInteger, CrossDeskVideoAdaptationPolicy) {
           displayNames:(NSArray<NSString *> *)displayNames
           displaySizes:(NSArray<NSValue *> *)displaySizes;
 - (void)rtcBridge:(CrossDeskRTCBridge *)bridge
-    didReceivePresence:(NSDictionary<NSString *, NSNumber *> *)presence;
+    didReceivePresence:(NSDictionary<NSString *, NSNumber *> *)presence
+               snapshot:(BOOL)snapshot;
 - (void)rtcBridge:(CrossDeskRTCBridge *)bridge
     didReceiveCursorVisible:(BOOL)visible
                       shape:(NSInteger)shape
@@ -104,7 +105,9 @@ typedef NS_ENUM(NSInteger, CrossDeskVideoAdaptationPolicy) {
 - (void)setHardwareAccelerationEnabled:(BOOL)enabled;
 - (void)setVideoAdaptationPolicy:(CrossDeskVideoAdaptationPolicy)policy;
 - (void)requestPresenceForRemoteIDs:(NSArray<NSString *> *)remoteIDs
-    NS_SWIFT_NAME(requestPresence(remoteIDs:));
+                         subscribe:(BOOL)subscribe
+    NS_SWIFT_NAME(requestPresence(remoteIDs:subscribe:));
+- (void)invalidatePresence;
 
 - (void)connectToRemoteID:(NSString *)remoteID password:(NSString *)password;
 - (void)disconnect;
