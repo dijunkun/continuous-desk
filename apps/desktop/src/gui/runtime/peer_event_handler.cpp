@@ -167,6 +167,8 @@ void PeerEventHandler::OnSignalStatus(SignalStatus status, const char* user_id,
   std::string client_id(user_id, user_id_size);
   if (client_id == runtime->client_id_) {
     runtime->signal_status_ = status;
+    runtime->device_presence_cache_.SetSignalConnected(
+        status == SignalStatus::SignalConnected);
     if (SignalStatus::SignalConnecting == status) {
       runtime->signal_connected_ = false;
     } else if (SignalStatus::SignalConnected == status) {

@@ -200,6 +200,8 @@ int GuiRuntime::CreateConnectionPeer() {
   // The previous peer may have left a terminal status behind. Reset it before
   // Init() starts emitting callbacks for the newly selected server.
   signal_connected_ = false;
+  device_presence_cache_.SetSignalConnected(false);
+  need_to_send_recent_connections_ = true;
   signal_status_ = SignalStatus::SignalConnecting;
 
   {

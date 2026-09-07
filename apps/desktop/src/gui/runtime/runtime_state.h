@@ -55,13 +55,15 @@ struct RecentConnectionsState {
   int recent_connection_image_height_ = 90;
   uint32_t recent_connection_image_save_time_ = 0;
   DevicePresenceCache device_presence_cache_;
-  bool need_to_send_recent_connections_ = true;
+  std::atomic<bool> need_to_send_recent_connections_{true};
+  std::chrono::steady_clock::time_point next_presence_refresh_at_{};
+  std::chrono::steady_clock::time_point last_presence_request_attempt_at_{};
 };
 
 struct PeerState {
   SignalStatus signal_status_ = SignalStatus::SignalClosed;
   std::string signal_status_str_;
-  bool signal_connected_ = false;
+  std::atomic<bool> signal_connected_{false};
   PeerPtr *peer_ = nullptr;
   PeerPtr *peer_reserved_ = nullptr;
   std::string video_primary_label_ = "primary_display";

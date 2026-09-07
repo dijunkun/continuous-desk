@@ -14,42 +14,39 @@
 #include "platform.h"
 #include "platform/video_renderer.h"
 #include "rd_log.h"
+#include "runtime/device_presence_request.h"
 #include "runtime/gui_runtime.h"
 
 namespace crossdesk {
 
 namespace {
 constexpr auto kPresenceProbeTimeout = std::chrono::seconds(5);
+constexpr auto kPresenceRefreshInterval = std::chrono::seconds(30);
+constexpr auto kPresenceRetryInterval = std::chrono::seconds(1);
 }  // namespace
 
 void GuiRuntime::HandleConnectionStatusChange() {
-  if (signal_connected_ && peer_ && need_to_send_recent_connections_) {
-    if (!recent_connection_ids_.empty()) {
-      nlohmann::json j;
-      j["type"] = "recent_connections_presence";
-      j["user_id"] = client_id_;
-      j["devices"] = nlohmann::json::array();
-      for (const auto& id : recent_connection_ids_) {
-        std::string pure_id = id;
-        size_t pos_y = pure_id.find('Y');
-        size_t pos_n = pure_id.find('N');
-        size_t pos = std::string::npos;
-        if (pos_y != std::string::npos &&
-            (pos_n == std::string::npos || pos_y < pos_n)) {
-          pos = pos_y;
-        } else if (pos_n != std::string::npos) {
-          pos = pos_n;
-        }
-        if (pos != std::string::npos) {
-          pure_id = pure_id.substr(0, pos);
-        }
-        j["devices"].push_back(pure_id);
-      }
-      auto s = j.dump();
-      SendSignalMessage(peer_, s.data(), s.size());
-    }
+  if (!signal_connected_ || !peer_) {
+    return;
   }
-  need_to_send_recent_connections_ = false;
+  const auto now = std::chrono::steady_clock::now();
+  if (now - last_presence_request_attempt_at_ < kPresenceRetryInterval) {
+    return;
+  }
+  // Consume the flag before sending so a concurrent reconnect cannot lose its
+  // refresh request. Keep it pending while disconnected or after a send error.
+  const bool requested = need_to_send_recent_connections_.exchange(false);
+  if (!requested && now < next_presence_refresh_at_) {
+    return;
+  }
+  last_presence_request_attempt_at_ = now;
+  const auto message =
+      BuildDevicePresenceRequest(client_id_, recent_connection_ids_, true).dump();
+  if (SendSignalMessage(peer_, message.data(), message.size()) == 0) {
+    next_presence_refresh_at_ = now + kPresenceRefreshInterval;
+  } else {
+    need_to_send_recent_connections_ = true;
+  }
 }
 
 void GuiRuntime::HandlePendingPresenceProbe() {
@@ -200,11 +197,9 @@ int GuiRuntime::RequestSingleDevicePresence(const std::string& remote_id,
     pending_presence_remember_password_ = remember_password;
   }
 
-  nlohmann::json j;
-  j["type"] = "recent_connections_presence";
-  j["user_id"] = client_id_;
-  j["devices"] = nlohmann::json::array({remote_id});
-  auto s = j.dump();
+  const auto s = BuildDevicePresenceRequest(
+                     client_id_, recent_connection_ids_, false, remote_id)
+                     .dump();
 
   int ret = SendSignalMessage(peer_, s.data(), s.size());
   if (ret != 0) {
@@ -308,6 +303,7 @@ void GuiRuntime::CloseConnectionPeer() {
   devices_.StopSpeakerCapturer();
   devices_.StopKeyboardCapturer();
   signal_connected_ = false;
+  device_presence_cache_.SetSignalConnected(false);
   signal_status_ = SignalStatus::SignalClosed;
   PeerPtr* peer;
   {
