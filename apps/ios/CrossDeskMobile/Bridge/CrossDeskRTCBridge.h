@@ -111,6 +111,7 @@ typedef NS_ENUM(NSInteger, CrossDeskVideoAdaptationPolicy) {
 
 - (void)connectToRemoteID:(NSString *)remoteID password:(NSString *)password;
 - (void)disconnect;
+- (void)requestKeyFrame;
 
 - (void)sendPointerAtX:(float)x
                      y:(float)y

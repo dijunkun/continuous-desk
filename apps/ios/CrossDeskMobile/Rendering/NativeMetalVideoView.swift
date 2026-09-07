@@ -10,6 +10,7 @@ import UIKit
 /// itself. This avoids the Core Image -> MTKView path, which can remain black
 /// on a physical device even though VideoToolbox is producing valid frames.
 struct NativeVideoView: UIViewRepresentable {
+    @Environment(\.scenePhase) private var scenePhase
     let pixelBuffer: CVPixelBuffer?
 
     func makeUIView(context: Context) -> SampleBufferVideoView {
@@ -17,7 +18,7 @@ struct NativeVideoView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: SampleBufferVideoView, context: Context) {
-        uiView.display(pixelBuffer)
+        uiView.display(pixelBuffer, isActive: scenePhase == .active)
     }
 }
 
@@ -31,6 +32,7 @@ final class SampleBufferVideoView: UIView {
     }
 
     private var lastPixelBuffer: CVPixelBuffer?
+    private var renderingActive = false
     private var submittedFrames: UInt64 = 0
     private var droppedFrames: UInt64 = 0
 
@@ -55,7 +57,16 @@ final class SampleBufferVideoView: UIView {
         videoLayer.videoGravity = .resize
     }
 
-    func display(_ pixelBuffer: CVPixelBuffer?) {
+    func display(_ pixelBuffer: CVPixelBuffer?, isActive: Bool) {
+        if renderingActive != isActive {
+            renderingActive = isActive
+            // Backgrounding can invalidate the display layer without changing
+            // the retained frame. Clear the queue and allow that frame to be
+            // submitted again when the scene becomes active.
+            lastPixelBuffer = nil
+            videoLayer.flushAndRemoveImage()
+        }
+
         guard let pixelBuffer else {
             lastPixelBuffer = nil
             submittedFrames = 0
@@ -63,17 +74,20 @@ final class SampleBufferVideoView: UIView {
             videoLayer.flushAndRemoveImage()
             return
         }
+        guard renderingActive else { return }
 
-        // SwiftUI can refresh for unrelated status fields. Do not enqueue the
-        // same retained CVPixelBuffer more than once.
-        guard lastPixelBuffer !== pixelBuffer else { return }
-        lastPixelBuffer = pixelBuffer
-
-        if videoLayer.status == .failed {
+        // Check recovery before deduplicating frames: a failed layer may need
+        // to display the same buffer again even if no new decoded frame arrives.
+        if videoLayer.status == .failed || videoLayer.requiresFlushToResumeDecoding {
             NSLog("CrossDesk video layer failed: %@",
                   videoLayer.error?.localizedDescription ?? "unknown error")
             videoLayer.flush()
+            lastPixelBuffer = nil
         }
+
+        // SwiftUI can refresh for unrelated status fields. Only deduplicate a
+        // frame after it was actually submitted to a healthy, active layer.
+        guard lastPixelBuffer !== pixelBuffer else { return }
 
         // Never let AVSampleBufferDisplayLayer turn temporary rendering
         // pressure into seconds of latency. Its queued buffers are already
@@ -132,6 +146,7 @@ final class SampleBufferVideoView: UIView {
         }
 
         videoLayer.enqueue(sampleBuffer)
+        lastPixelBuffer = pixelBuffer
         submittedFrames &+= 1
         if submittedFrames == 1 || submittedFrames.isMultiple(of: 300) {
             NSLog("CrossDesk presented video frame %llu (%zu x %zu)",

@@ -233,7 +233,6 @@ void DispatchMain(dispatch_block_t block) {
 - (void)createControllerPeer;
 - (void)destroyIdentityPeer;
 - (void)destroyControllerPeer;
-- (void)requestKeyFrame;
 @end
 
 namespace {

@@ -23,12 +23,15 @@ struct ContentView: View {
             }
             if scenePhase == .active {
                 session.refreshRecentConnectionPresenceAfterForeground()
+                session.resumeVideoAfterForeground()
             }
         }
         .onChange(of: scenePhase) { phase in
             if phase == .active {
                 session.refreshRecentConnectionPresenceAfterForeground()
+                session.resumeVideoAfterForeground()
             } else if phase == .background {
+                session.suspendVideoForBackground()
                 session.suspendPresenceMonitoring()
             }
         }

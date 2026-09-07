@@ -408,6 +408,8 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
     private var shouldCaptureThumbnail = false
     private var activeDisplayName = ""
     private var remoteCursorSequence: UInt32?
+    private var videoWasBackgrounded = false
+    private var videoRecoveryTask: Task<Void, Never>?
     private var pendingPresenceRemoteID: String?
     private var presenceProbeGeneration: UInt64 = 0
     private var signalConnected = false
@@ -503,6 +505,7 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
     }
 
     private func beginRemoteConnection(_ identifier: String) {
+        cancelVideoRecovery()
         cancelPresenceProbe()
         activeRemoteID = identifier
         activeDisplayName = ""
@@ -577,6 +580,7 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
     }
 
     func disconnect() {
+        cancelVideoRecovery()
         let wasCheckingPresence = pendingPresenceRemoteID != nil
         cancelPresenceProbe()
         if wasCheckingPresence {
@@ -599,6 +603,7 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
     }
 
     func retry() {
+        cancelVideoRecovery()
         bridge.disconnect()
         connect()
     }
@@ -688,6 +693,41 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
         stopPresenceMonitoring()
         invalidatePresence()
         cancelPendingPresenceConnection()
+    }
+
+    func suspendVideoForBackground() {
+        videoWasBackgrounded = true
+        cancelVideoRecovery()
+    }
+
+    func resumeVideoAfterForeground() {
+        guard videoWasBackgrounded else { return }
+        videoWasBackgrounded = false
+        guard isConnected, sessionVisible else { return }
+
+        cancelVideoRecovery()
+        NSLog("CrossDesk resuming foreground video, requesting key frame")
+        bridge.requestKeyFrame()
+        // The first request can race transport resumption. Retry briefly until
+        // a decoded frame arrives, and never carry retries into another session.
+        videoRecoveryTask = Task { @MainActor [weak self] in
+            for delay in [500_000_000, 1_000_000_000, 2_000_000_000] as [UInt64] {
+                do {
+                    try await Task.sleep(nanoseconds: delay)
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled, let self,
+                      !self.videoWasBackgrounded,
+                      self.isConnected, self.sessionVisible else { return }
+                self.bridge.requestKeyFrame()
+            }
+        }
+    }
+
+    private func cancelVideoRecovery() {
+        videoRecoveryTask?.cancel()
+        videoRecoveryTask = nil
     }
 
     func refreshRecentConnectionPresenceAfterForeground() {
@@ -846,6 +886,9 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
                    didChange state: CrossDeskConnectionState,
                    remoteID: String) {
         isConnected = state.rawValue == 1
+        if !isConnected {
+            cancelVideoRecovery()
+        }
         isConnecting = [0, 2].contains(state.rawValue)
         switch state.rawValue {
         case 0: connectionStatus = "正在建立远程连接"
@@ -934,6 +977,8 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
                    didReceive pixelBuffer: CVPixelBuffer,
                    width: Int,
                    height: Int) {
+        guard !videoWasBackgrounded else { return }
+        cancelVideoRecovery()
         // Buffer and encoded dimensions must be one observable value. Adaptive
         // resolution changes must never expose a new frame with the previous
         // frame's geometry to SwiftUI.
