@@ -36,12 +36,12 @@ int GuiApplication::SelfHostedServerWindow() {
         ImGui::SetNextWindowPos(
             ImVec2(io.DisplaySize.x * 0.298f, io.DisplaySize.y * 0.25f));
         ImGui::SetNextWindowSize(
-            ImVec2(io.DisplaySize.x * 0.407f, io.DisplaySize.y * 0.35f));
+            ImVec2(io.DisplaySize.x * 0.407f, io.DisplaySize.y * 0.29f));
       } else {
         ImGui::SetNextWindowPos(
             ImVec2(io.DisplaySize.x * 0.27f, io.DisplaySize.y * 0.3f));
         ImGui::SetNextWindowSize(
-            ImVec2(io.DisplaySize.x * 0.465f, io.DisplaySize.y * 0.35f));
+            ImVec2(io.DisplaySize.x * 0.465f, io.DisplaySize.y * 0.29f));
       }
 
       self_hosted_server_config_window_pos_reset_ = false;
@@ -101,25 +101,6 @@ int GuiApplication::SelfHostedServerWindow() {
                          IM_ARRAYSIZE(signal_server_port_self_));
       }
 
-      ImGui::Separator();
-
-      {
-        ImGui::AlignTextToFramePadding();
-        ImGui::Text("%s", localization::self_hosted_server_coturn_server_port
-                              [localization_language_index_]
-                                  .c_str());
-        ImGui::SameLine();
-        if (ConfigCenter::LANGUAGE::CHINESE == localization_language_) {
-          ImGui::SetCursorPosX(title_bar_button_width_ * 2.5f);
-        } else {
-          ImGui::SetCursorPosX(title_bar_button_width_ * 3.43f);
-        }
-        ImGui::SetNextItemWidth(title_bar_button_width_ * 3.8f);
-
-        ImGui::InputText("##coturn_server_port_self_", coturn_server_port_self_,
-                         IM_ARRAYSIZE(coturn_server_port_self_));
-      }
-
       if (stream_window_inited_) {
         ImGui::EndDisabled();
       }
@@ -141,17 +122,12 @@ int GuiApplication::SelfHostedServerWindow() {
 
         config_center_->SetServerHost(signal_server_ip_self_);
         config_center_->SetServerPort(atoi(signal_server_port_self_));
-        config_center_->SetCoturnServerPort(atoi(coturn_server_port_self_));
         strncpy(signal_server_ip_, signal_server_ip_self_,
                 sizeof(signal_server_ip_) - 1);
         signal_server_ip_[sizeof(signal_server_ip_) - 1] = '\0';
         strncpy(signal_server_port_, signal_server_port_self_,
                 sizeof(signal_server_port_) - 1);
         signal_server_port_[sizeof(signal_server_port_) - 1] = '\0';
-        strncpy(coturn_server_port_, coturn_server_port_self_,
-                sizeof(coturn_server_port_) - 1);
-        coturn_server_port_[sizeof(coturn_server_port_) - 1] = '\0';
-
         self_hosted_server_config_window_pos_reset_ = true;
       }
 
@@ -172,14 +148,6 @@ int GuiApplication::SelfHostedServerWindow() {
           signal_server_port_self_[sizeof(signal_server_port_self_) - 1] = '\0';
         } else {
           signal_server_port_self_[0] = '\0';
-        }
-        int coturn_port = config_center_->GetCoturnServerPort();
-        if (coturn_port > 0) {
-          strncpy(coturn_server_port_self_, std::to_string(coturn_port).c_str(),
-                  sizeof(coturn_server_port_self_) - 1);
-          coturn_server_port_self_[sizeof(coturn_server_port_self_) - 1] = '\0';
-        } else {
-          coturn_server_port_self_[0] = '\0';
         }
       }
 

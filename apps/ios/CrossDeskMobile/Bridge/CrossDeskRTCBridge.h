@@ -100,7 +100,6 @@ typedef NS_ENUM(NSInteger, CrossDeskVideoAdaptationPolicy) {
 
 - (void)configureWithSignalHost:(NSString *)host
                      signalPort:(NSInteger)signalPort
-                       turnPort:(NSInteger)turnPort
                      enableSRTP:(BOOL)enableSRTP;
 - (void)setHardwareAccelerationEnabled:(BOOL)enabled;
 - (void)setVideoAdaptationPolicy:(CrossDeskVideoAdaptationPolicy)policy;

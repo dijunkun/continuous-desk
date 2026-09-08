@@ -78,8 +78,6 @@ inline int ApplyMainWindowStrings(
       Text(localization::self_hosted_server_address[language]));
   strings.set_server_port(
       Text(localization::self_hosted_server_port[language]));
-  strings.set_coturn_port(
-      Text(localization::self_hosted_server_coturn_server_port[language]));
   strings.set_version(Text(localization::version[language]));
   strings.set_signal_connected(Text(localization::signal_connected[language]));
   strings.set_signal_disconnected(

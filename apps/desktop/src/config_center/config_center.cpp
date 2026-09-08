@@ -116,16 +116,6 @@ int ConfigCenter::Load() {
   } else {
     signal_server_port_ = 0;
   }
-  const char* coturn_server_port_value =
-      ini_.GetValue(section_, "coturn_server_port", nullptr);
-  if (coturn_server_port_value != nullptr &&
-      strlen(coturn_server_port_value) > 0) {
-    coturn_server_port_ =
-        static_cast<int>(ini_.GetLongValue(section_, "coturn_server_port", 0));
-  } else {
-    coturn_server_port_ = 0;
-  }
-
   enable_autostart_ =
       ini_.GetBoolValue(section_, "enable_autostart", enable_autostart_);
   enable_daemon_ = ini_.GetBoolValue(section_, "enable_daemon", enable_daemon_);
@@ -171,8 +161,6 @@ int ConfigCenter::Save() {
     ini_.SetValue(section_, "signal_server_host", signal_server_host_.c_str());
     ini_.SetLongValue(section_, "signal_server_port",
                       static_cast<long>(signal_server_port_));
-    ini_.SetLongValue(section_, "coturn_server_port",
-                      static_cast<long>(coturn_server_port_));
   }
 
   ini_.SetBoolValue(section_, "enable_autostart", enable_autostart_);
@@ -316,17 +304,6 @@ int ConfigCenter::SetServerPort(int signal_server_port) {
   return 0;
 }
 
-int ConfigCenter::SetCoturnServerPort(int coturn_server_port) {
-  coturn_server_port_ = coturn_server_port;
-  ini_.SetLongValue(section_, "coturn_server_port",
-                    static_cast<long>(coturn_server_port_));
-  SI_Error rc = ini_.SaveFile(config_path_.c_str());
-  if (rc < 0) {
-    return -1;
-  }
-  return 0;
-}
-
 int ConfigCenter::SetSelfHosted(bool enable_self_hosted) {
   enable_self_hosted_ = enable_self_hosted;
   ini_.SetBoolValue(section_, "enable_self_hosted", enable_self_hosted_);
@@ -346,19 +323,9 @@ int ConfigCenter::SetSelfHosted(bool enable_self_hosted) {
       signal_server_port_ = static_cast<int>(
           ini_.GetLongValue(section_, "signal_server_port", 0));
     }
-    const char* coturn_server_port_value =
-        ini_.GetValue(section_, "coturn_server_port", nullptr);
-    if (coturn_server_port_value != nullptr &&
-        strlen(coturn_server_port_value) > 0) {
-      coturn_server_port_ = static_cast<int>(
-          ini_.GetLongValue(section_, "coturn_server_port", 0));
-    }
-
     ini_.SetValue(section_, "signal_server_host", signal_server_host_.c_str());
     ini_.SetLongValue(section_, "signal_server_port",
                       static_cast<long>(signal_server_port_));
-    ini_.SetLongValue(section_, "coturn_server_port",
-                      static_cast<long>(coturn_server_port_));
   }
 
   SI_Error rc = ini_.SaveFile(config_path_.c_str());
@@ -456,18 +423,12 @@ std::string ConfigCenter::GetSignalServerHost() const {
 
 int ConfigCenter::GetSignalServerPort() const { return signal_server_port_; }
 
-int ConfigCenter::GetCoturnServerPort() const { return coturn_server_port_; }
-
 std::string ConfigCenter::GetDefaultServerHost() const {
   return signal_server_host_default_;
 }
 
 int ConfigCenter::GetDefaultSignalServerPort() const {
   return server_port_default_;
-}
-
-int ConfigCenter::GetDefaultCoturnServerPort() const {
-  return coturn_server_port_default_;
 }
 
 bool ConfigCenter::IsSelfHosted() const { return enable_self_hosted_; }

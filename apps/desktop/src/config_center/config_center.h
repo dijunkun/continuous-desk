@@ -47,7 +47,6 @@ class ConfigCenter {
   int SetSrtp(bool enable_srtp);
   int SetServerHost(const std::string& signal_server_host);
   int SetServerPort(int signal_server_port);
-  int SetCoturnServerPort(int coturn_server_port);
   int SetSelfHosted(bool enable_self_hosted);
   int SetAutostart(bool enable_autostart);
   int SetDaemon(bool enable_daemon);
@@ -67,10 +66,8 @@ class ConfigCenter {
   bool IsEnableSrtp() const;
   std::string GetSignalServerHost() const;
   int GetSignalServerPort() const;
-  int GetCoturnServerPort() const;
   std::string GetDefaultServerHost() const;
   int GetDefaultSignalServerPort() const;
-  int GetDefaultCoturnServerPort() const;
   bool IsSelfHosted() const;
   bool IsEnableAutostart() const;
   bool IsEnableDaemon() const;
@@ -98,8 +95,6 @@ class ConfigCenter {
   std::string signal_server_host_default_ = "api.crossdesk.cn";
   int signal_server_port_ = 0;
   int server_port_default_ = 9099;
-  int coturn_server_port_ = 0;
-  int coturn_server_port_default_ = 3478;
   bool enable_self_hosted_ = false;
   bool enable_autostart_ = false;
   bool enable_daemon_ = false;

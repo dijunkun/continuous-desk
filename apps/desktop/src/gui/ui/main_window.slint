@@ -54,7 +54,6 @@ export global UiStrings {
     in-out property <string> default-desktop: "Desktop";
     in-out property <string> server-host: "Server host";
     in-out property <string> server-port: "Signal port";
-    in-out property <string> coturn-port: "TURN port";
     in-out property <string> version: "Version";
     in-out property <string> copyright: "© 2026 by JUNKUN DI. All right reserved.";
     in-out property <string> license: "Licensed under GNU GPL v3.";
@@ -250,7 +249,6 @@ export component MainWindow inherits Window {
     in-out property <string> file-save-path: "";
     in-out property <string> server-host: "";
     in-out property <string> server-port: "";
-    in-out property <string> coturn-port: "";
     in property <bool> settings-session-active: false;
     // Keep the setting visible on every platform. Unsupported builds expose it
     // as disabled so the fixed settings layout never turns into a blank row.
@@ -1519,7 +1517,7 @@ export component MainWindow inherits Window {
             x: root.compact-language ? 190px : 140px;
             y: 105px;
             width: root.compact-language ? 260px : 360px;
-            height: 168px;
+            height: 138px;
             border-radius: 7px;
 
             Rectangle {
@@ -1559,21 +1557,8 @@ export component MainWindow inherits Window {
                 LineEdit { x: 1px; y: 1.5px; width: parent.width - 2px; height: parent.height - 2px; text <=> root.server-port; input-type: InputType.number; font-size: ImGuiFontStyle.body; }
                 LineEditFocusUnderlineMask { x: 5px; y: parent.height - 3px; width: parent.width - 10px; }
             }
-            Text { x: 8px; y: 91px; width: root.compact-language ? 88px : 165px; height: 24px; text: UiStrings.coturn-port; font-size: ImGuiFontStyle.body; overflow: elide; vertical-alignment: center; }
-            Rectangle {
-                x: root.compact-language ? 100px : 173px;
-                y: 90px;
-                width: root.compact-language ? 152px : 179px;
-                height: 24px;
-                background: white;
-                border-width: 1px;
-                border-color: ImGuiLineStyle.border;
-                border-radius: 4px;
-                LineEdit { x: 1px; y: 1.5px; width: parent.width - 2px; height: parent.height - 2px; text <=> root.coturn-port; input-type: InputType.number; font-size: ImGuiFontStyle.body; }
-                LineEditFocusUnderlineMask { x: 5px; y: parent.height - 3px; width: parent.width - 10px; }
-            }
-            CompactButton { x: root.compact-language ? 93px : 135px; y: 130px; primary: true; text: UiStrings.ok; clicked => { root.save-self-hosted-settings(); root.self-host-settings-open = false; } }
-            CompactButton { x: root.compact-language ? 134px : 176px; y: 130px; width: root.compact-language ? 34px : 56px; text: UiStrings.cancel; clicked => { root.cancel-self-hosted-settings(); root.self-host-settings-open = false; } }
+            CompactButton { x: root.compact-language ? 93px : 135px; y: 100px; primary: true; text: UiStrings.ok; clicked => { root.save-self-hosted-settings(); root.self-host-settings-open = false; } }
+            CompactButton { x: root.compact-language ? 134px : 176px; y: 100px; width: root.compact-language ? 34px : 56px; text: UiStrings.cancel; clicked => { root.cancel-self-hosted-settings(); root.self-host-settings-open = false; } }
         }
     }
 

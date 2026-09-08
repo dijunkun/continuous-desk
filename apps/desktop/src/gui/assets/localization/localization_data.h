@@ -149,8 +149,6 @@ struct TranslationRow {
     "Server Address:", u8"Адрес сервера:")                                     \
   X(self_hosted_server_port, u8"信令服务端口:",                                \
     "Signal Service Port:", u8"Порт сигнального сервиса:")                     \
-  X(self_hosted_server_coturn_server_port, u8"中继服务端口:",                  \
-    "Relay Service Port:", u8"Порт реле-сервиса:")                             \
   X(ok, u8"确认", "OK", u8"ОК")                                                \
   X(cancel, u8"取消", "Cancel", u8"Отмена")                                    \
   X(new_password, u8"请输入六位密码:",                                         \

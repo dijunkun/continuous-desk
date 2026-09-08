@@ -716,8 +716,6 @@ private struct ServerSettingsView: View {
                         .autocorrectionDisabled()
                     TextField("信令端口", text: $session.signalPort)
                         .keyboardType(.numberPad)
-                    TextField("STUN/TURN 端口", text: $session.turnPort)
-                        .keyboardType(.numberPad)
                 }
                 Section {
                     Toggle("启用 SRTP", isOn: $session.enableSRTP)

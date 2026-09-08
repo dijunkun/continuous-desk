@@ -358,7 +358,6 @@ private final class RemoteAudioPlayer {
 final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDelegate {
     @Published var signalHost = "api.crossdesk.cn"
     @Published var signalPort = "9099"
-    @Published var turnPort = "3478"
     @Published var enableSRTP = false
     @Published var mouseControlMode = MouseControlMode.saved {
         didSet { mouseControlMode.save() }
@@ -425,7 +424,6 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
     private struct BridgeConfiguration: Equatable {
         let host: String
         let signalPort: Int
-        let turnPort: Int
         let enableSRTP: Bool
     }
     private var bridgeConfiguration: BridgeConfiguration?
@@ -453,14 +451,14 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
     @discardableResult
     func configureBridge() -> Bool {
         let host = signalHost.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let signal = Int(signalPort), let turn = Int(turnPort),
-              (1...65535).contains(signal), (1...65535).contains(turn),
+        guard let signal = Int(signalPort),
+              (1...65535).contains(signal),
               !host.isEmpty else {
             signalStatus = "服务器配置无效"
             return false
         }
         let configuration = BridgeConfiguration(host: host, signalPort: signal,
-                                                turnPort: turn, enableSRTP: enableSRTP)
+                                                enableSRTP: enableSRTP)
         if bridgeConfiguration != configuration {
             bridgeConfiguration = configuration
             signalConnected = false
@@ -475,7 +473,6 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
         bridge.setVideoAdaptationPolicy(videoAdaptationPolicy.bridgeValue)
         bridge.configure(withSignalHost: host,
                          signalPort: signal,
-                         turnPort: turn,
                          enableSRTP: enableSRTP)
         return true
     }

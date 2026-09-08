@@ -34,12 +34,10 @@ int GuiRuntime::CreateConnectionPeer() {
 
   std::string signal_server_ip;
   int signal_server_port;
-  int coturn_server_port;
 
   if (config_center_->IsSelfHosted()) {
     signal_server_ip = config_center_->GetSignalServerHost();
     signal_server_port = config_center_->GetSignalServerPort();
-    coturn_server_port = config_center_->GetCoturnServerPort();
 
     std::string current_self_hosted_ip = config_center_->GetSignalServerHost();
     const bool use_cached_id = settings_.LoadCachedSelfHostedIdentity();
@@ -64,7 +62,6 @@ int GuiRuntime::CreateConnectionPeer() {
   } else {
     signal_server_ip = config_center_->GetDefaultServerHost();
     signal_server_port = config_center_->GetDefaultSignalServerPort();
-    coturn_server_port = config_center_->GetDefaultCoturnServerPort();
     settings_.ActivateCachedPublicIdentity();
     params_.user_id = client_id_with_password_;
   }
@@ -115,34 +112,11 @@ int GuiRuntime::CreateConnectionPeer() {
   } else {
     signal_server_port_self_[0] = '\0';
   }
-  int coturn_port = config_center_->GetCoturnServerPort();
-  if (coturn_port > 0) {
-    strncpy(coturn_server_port_self_, std::to_string(coturn_port).c_str(),
-            sizeof(coturn_server_port_self_) - 1);
-    coturn_server_port_self_[sizeof(coturn_server_port_self_) - 1] = '\0';
-  } else {
-    coturn_server_port_self_[0] = '\0';
-  }
-
   // peer config
   strncpy((char *)params_.signal_server_ip, signal_server_ip.c_str(),
           sizeof(params_.signal_server_ip) - 1);
   params_.signal_server_ip[sizeof(params_.signal_server_ip) - 1] = '\0';
   params_.signal_server_port = signal_server_port;
-  strncpy((char *)params_.stun_server_ip, signal_server_ip.c_str(),
-          sizeof(params_.stun_server_ip) - 1);
-  params_.stun_server_ip[sizeof(params_.stun_server_ip) - 1] = '\0';
-  params_.stun_server_port = coturn_server_port;
-  strncpy((char *)params_.turn_server_ip, signal_server_ip.c_str(),
-          sizeof(params_.turn_server_ip) - 1);
-  params_.turn_server_ip[sizeof(params_.turn_server_ip) - 1] = '\0';
-  params_.turn_server_port = coturn_server_port;
-  // TURN credentials are issued by the signaling server after login. Keep the
-  // initial values empty so a reusable static password is never embedded in
-  // the client binary.
-  params_.turn_server_username[0] = '\0';
-  params_.turn_server_password[0] = '\0';
-
   strncpy(params_.log_path, dll_log_path_.c_str(),
           sizeof(params_.log_path) - 1);
   params_.log_path[sizeof(params_.log_path) - 1] = '\0';

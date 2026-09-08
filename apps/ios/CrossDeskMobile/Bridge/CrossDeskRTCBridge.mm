@@ -75,7 +75,6 @@ struct RTCState {
   CallbackContext controller_context;
   std::string signal_host;
   int signal_port = 0;
-  int turn_port = 0;
   bool enable_srtp = false;
   bool hardware_acceleration = true;
   VideoDegradationPreference video_adaptation_policy =
@@ -332,14 +331,6 @@ Params MakeParams(const RTCState &state, const std::string &user_id,
   CopyCString(params.signal_server_ip, sizeof(params.signal_server_ip),
               state.signal_host);
   params.signal_server_port = state.signal_port;
-  CopyCString(params.stun_server_ip, sizeof(params.stun_server_ip),
-              state.signal_host);
-  params.stun_server_port = state.turn_port;
-  CopyCString(params.turn_server_ip, sizeof(params.turn_server_ip),
-              state.signal_host);
-  params.turn_server_port = state.turn_port;
-  params.turn_server_username[0] = '\0';
-  params.turn_server_password[0] = '\0';
   CopyCString(params.log_path, sizeof(params.log_path), state.log_path);
   params.hardware_acceleration = state.hardware_acceleration;
   params.native_video_output = true;
@@ -442,13 +433,12 @@ Params MakeParams(const RTCState &state, const std::string &user_id,
 
 - (void)configureWithSignalHost:(NSString *)host
                      signalPort:(NSInteger)signalPort
-                       turnPort:(NSInteger)turnPort
                      enableSRTP:(BOOL)enableSRTP {
   NSString *trimmed = [host stringByTrimmingCharactersInSet:
                                 NSCharacterSet.whitespaceAndNewlineCharacterSet];
   const char *host_c_string = trimmed.UTF8String;
   const std::string host_value = host_c_string ? host_c_string : "";
-  if (host_value.empty() || signalPort <= 0 || turnPort <= 0) return;
+  if (host_value.empty() || signalPort <= 0) return;
 
   NSString *cache = NSSearchPathForDirectoriesInDomains(
                         NSCachesDirectory, NSUserDomainMask, YES)
@@ -465,7 +455,6 @@ Params MakeParams(const RTCState &state, const std::string &user_id,
   dispatch_async(_rtcQueue, ^{
     const bool unchanged = self->_state->signal_host == host_value &&
                            self->_state->signal_port == signalPort &&
-                           self->_state->turn_port == turnPort &&
                            self->_state->enable_srtp == enableSRTP &&
                            self->_state->identity_peer != nullptr;
     if (unchanged) return;
@@ -474,7 +463,6 @@ Params MakeParams(const RTCState &state, const std::string &user_id,
     [self destroyIdentityPeer];
     self->_state->signal_host = host_value;
     self->_state->signal_port = static_cast<int>(signalPort);
-    self->_state->turn_port = static_cast<int>(turnPort);
     self->_state->enable_srtp = enableSRTP;
     self->_state->log_path = log_path;
     self->_state->identity_ready = false;

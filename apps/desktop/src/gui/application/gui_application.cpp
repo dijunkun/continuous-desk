@@ -1230,7 +1230,6 @@ void GuiApplication::ResetSettingsUi() {
   ui_->main->set_file_save_path(file_transfer_save_path_buf_);
   ui_->main->set_server_host(signal_server_ip_self_);
   ui_->main->set_server_port(signal_server_port_self_);
-  ui_->main->set_coturn_port(coturn_server_port_self_);
 }
 
 void GuiApplication::BindMainCallbacks() {
@@ -1388,7 +1387,6 @@ void GuiApplication::BindMainCallbacks() {
   main->on_save_self_hosted_settings([this] {
     const std::string host(ui_->main->get_server_host());
     const auto signal_port = ParsePort(ui_->main->get_server_port());
-    const auto coturn_port = ParsePort(ui_->main->get_coturn_port());
     if (!host.empty()) {
       config_center_->SetServerHost(host);
       std::memset(signal_server_ip_self_, 0, sizeof(signal_server_ip_self_));
@@ -1405,24 +1403,13 @@ void GuiApplication::BindMainCallbacks() {
       std::snprintf(signal_server_port_, sizeof(signal_server_port_), "%d",
                     *signal_port);
     }
-    if (coturn_port) {
-      config_center_->SetCoturnServerPort(*coturn_port);
-      std::snprintf(coturn_server_port_self_, sizeof(coturn_server_port_self_),
-                    "%d", *coturn_port);
-      std::snprintf(coturn_server_port_, sizeof(coturn_server_port_), "%d",
-                    *coturn_port);
-    }
   });
   main->on_cancel_self_hosted_settings([this] {
     const std::string host = config_center_->GetSignalServerHost();
     ui_->main->set_server_host(UiText(host));
     const int signal_port = config_center_->GetSignalServerPort();
-    const int coturn_port = config_center_->GetCoturnServerPort();
     ui_->main->set_server_port(signal_port > 0
                                    ? UiText(std::to_string(signal_port))
-                                   : slint::SharedString{});
-    ui_->main->set_coturn_port(coturn_port > 0
-                                   ? UiText(std::to_string(coturn_port))
                                    : slint::SharedString{});
   });
   main->on_open_download([this] { OpenUrl("https://crossdesk.cn"); });
@@ -2961,9 +2948,6 @@ void GuiApplication::SaveSettingsFromUi() {
   }
   if (const auto port = ParsePort(main->get_server_port())) {
     config_center_->SetServerPort(*port);
-  }
-  if (const auto port = ParsePort(main->get_coturn_port())) {
-    config_center_->SetCoturnServerPort(*port);
   }
 
   language_button_value_last_ = language_button_value_;

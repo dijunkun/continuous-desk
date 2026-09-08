@@ -139,7 +139,6 @@ struct UserSettingsState {
   bool enable_srtp_ = false;
   char signal_server_ip_[256] = "api.crossdesk.cn";
   char signal_server_port_[6] = "9099";
-  char coturn_server_port_[6] = "3478";
   bool enable_self_hosted_ = false;
   int language_button_value_last_ = 0;
   int video_quality_button_value_last_ = 0;
@@ -158,7 +157,6 @@ struct UserSettingsState {
   std::string file_transfer_save_path_last_;
   char signal_server_ip_self_[256] = "";
   char signal_server_port_self_[6] = "";
-  char coturn_server_port_self_[6] = "";
   bool settings_window_pos_reset_ = true;
   bool self_hosted_server_config_window_pos_reset_ = true;
   std::string selected_current_file_path_;
