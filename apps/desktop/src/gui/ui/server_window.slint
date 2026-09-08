@@ -7,6 +7,7 @@ export struct ControllerEntry {
 
 export component ServerWindow inherits Window {
     title: "CrossDesk";
+    icon: @image-url("../../../resources/linux/crossdesk_256x256.png");
     preferred-width: root.language-index == 0 ? 250px : root.language-index == 1 ? 330px : 430px;
     preferred-height: 150px;
     min-width: root.language-index == 0 ? 250px : root.language-index == 1 ? 330px : 430px;

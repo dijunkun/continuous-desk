@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Keep readelf and ldd output stable for the runtime dependency checks below.
+export LC_ALL=C
+
 if [[ $# -lt 3 || $# -gt 4 ]]; then
     echo "Usage: $0 <debian-arch> <xmake-arch> <version> [extra-recommendation]" >&2
     exit 2
@@ -169,11 +172,12 @@ EOF
 
 cat > "$DESKTOP_DIR/$PKG_NAME.desktop" <<EOF
 [Desktop Entry]
-Version=$DEB_VERSION
+Version=1.0
 Name=$APP_NAME
 Comment=$DESCRIPTION
 Exec=/usr/bin/$PKG_NAME
 Icon=$PKG_NAME
+StartupWMClass=$PKG_NAME
 Terminal=false
 Type=Application
 Categories=Utility;

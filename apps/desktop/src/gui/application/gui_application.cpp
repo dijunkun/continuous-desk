@@ -1111,6 +1111,9 @@ void GuiApplication::InitializeUi() {
     wayland_display_guard.emplace("WAYLAND_DISPLAY");
     wayland_socket_guard.emplace("WAYLAND_SOCKET");
   }
+  // Match crossdesk.desktop even when the Debian launcher runs crossdesk-bin.
+  // Set this before creating any windows so X11 and Wayland share the same id.
+  slint::set_xdg_app_id("crossdesk");
 #endif
   ui_ = std::make_unique<SlintUi>();
   ui_->video_presenter =
