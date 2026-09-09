@@ -212,6 +212,7 @@ export component MainWindow inherits Window {
     in property <bool> update-available: false;
     in property <bool> update-downloading: false;
     in property <bool> update-failed: false;
+    in property <bool> update-security-blocked: false;
     in property <float> update-progress: 0;
     in property <string> update-status: "";
     in property <string> current-version: "";
@@ -1696,7 +1697,7 @@ export component MainWindow inherits Window {
                     background: #334fd1;
                 }
             }
-            CompactButton { x: root.compact-language ? 163px : 130px; y: 309px; width: root.compact-language ? 34px : 70px; primary: true; text: UiStrings.download; enabled: !root.update-downloading; clicked => { root.start-update(); } }
+            CompactButton { x: root.compact-language ? 163px : 130px; y: 309px; width: root.compact-language ? 34px : 70px; primary: true; text: UiStrings.download; enabled: !root.update-downloading && !root.update-security-blocked; clicked => { root.start-update(); } }
             CompactButton { x: root.compact-language ? 204px : 207px; y: 309px; width: root.compact-language ? 34px : 56px; text: UiStrings.later; clicked => { root.cancel-update(); } }
         }
     }

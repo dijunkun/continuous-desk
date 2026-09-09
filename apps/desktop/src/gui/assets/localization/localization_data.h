@@ -186,6 +186,12 @@ struct TranslationRow {
     u8"Доступна новая версия")                                                 \
   X(update_downloading, u8"正在下载安装包…", "Downloading installer…",        \
     u8"Загрузка установщика…")                                                 \
+  X(update_checking, u8"正在进行 Windows 安全检查…",                           \
+    "Running Windows security checks…", u8"Проверка безопасности Windows…")    \
+  X(update_security_blocked,                                                 \
+    u8"Windows 安全检查未通过，请查看安全软件日志并核实发布者。",               \
+    "Windows security checks failed. Review security logs and verify the publisher.", \
+    u8"Проверка Windows не пройдена. Проверьте журнал защиты и издателя.")     \
   X(update_launching, u8"正在打开安装包，请确认管理员权限请求…",               \
     "Opening installer. Please confirm the administrator permission request…", \
     u8"Запуск установщика. Подтвердите запрос прав администратора…")           \

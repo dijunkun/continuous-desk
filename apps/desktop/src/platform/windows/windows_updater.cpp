@@ -1,7 +1,6 @@
 #include "windows_updater.h"
 
-#include <httplib.h>
-#include <shellapi.h>
+#include <shlobj.h>
 #include <windows.h>
 
 #include <random>
@@ -9,6 +8,7 @@
 
 #include "installer_download.h"
 #include "rd_log.h"
+#include "windows_installer.h"
 
 namespace crossdesk {
 
@@ -20,7 +20,7 @@ WindowsUpdater::~WindowsUpdater() {
 
 void WindowsUpdater::RemoveDownload() {
   // A running NSIS installer still needs its source file. Leave that one in
-  // the user's temporary directory; clean up cancelled/failed attempts.
+  // the user's update cache; clean up cancelled/failed attempts.
   if (installer_.empty() || installer_launched_) return;
   std::error_code error;
   std::filesystem::remove(installer_, error);
@@ -29,7 +29,9 @@ void WindowsUpdater::RemoveDownload() {
 
 void WindowsUpdater::Start(const nlohmann::json& metadata) {
   const State state = GetState();
-  if (state == State::Downloading || state == State::Launching) return;
+  if (state == State::Downloading || state == State::Checking ||
+      state == State::Launching || state == State::SecurityBlocked)
+    return;
   if (state == State::Ready || state == State::LaunchFailed ||
       state == State::Launched) {
     cancelled_ = false;
@@ -51,11 +53,18 @@ void WindowsUpdater::Start(const nlohmann::json& metadata) {
   }
   try {
     std::random_device random;
-    const auto temp = std::filesystem::temp_directory_path();
+    PWSTR local_app_data = nullptr;
+    const HRESULT path_result = SHGetKnownFolderPath(
+        FOLDERID_LocalAppData, KF_FLAG_CREATE, nullptr, &local_app_data);
+    if (FAILED(path_result))
+      throw std::runtime_error("Cannot locate LocalAppData");
+    const std::filesystem::path data_path(local_app_data);
+    CoTaskMemFree(local_app_data);
+    const auto updates = data_path / L"CrossDesk" / L"Updates";
+    std::filesystem::create_directories(updates);
     for (int attempt = 0; attempt < 10; ++attempt) {
-      const auto directory =
-          temp / ("CrossDesk-update-" + std::to_string(random()) + "-" +
-                  std::to_string(random()));
+      const auto directory = updates / ("download-" + std::to_string(random()) +
+                                        "-" + std::to_string(random()));
       if (std::filesystem::create_directory(directory)) {
         installer_ = directory / download->filename;
         break;
@@ -63,20 +72,23 @@ void WindowsUpdater::Start(const nlohmann::json& metadata) {
     }
     if (installer_.empty())
       throw std::runtime_error("Cannot create update directory");
-    client_ = std::make_shared<httplib::Client>(download->origin);
-    client_->set_connection_timeout(5);
-    client_->set_read_timeout(5);
-    client_->set_write_timeout(5);
+    source_url_ = download->origin + download->path;
     state_ = State::Downloading;
-    worker_ = std::thread([this, path = download->path] {
-      const bool success =
-          DownloadInstaller(*client_, path, installer_,
-                            [this](uint64_t received, uint64_t total) {
-                              downloaded_ = received;
-                              total_ = total;
-                              return !cancelled_.load();
-                            });
-      state_ = success ? State::Ready : State::Failed;
+    worker_ = std::thread([this, download = *download] {
+      const bool success = DownloadWindowsInstaller(
+          download, installer_, [this](uint64_t received, uint64_t total) {
+            downloaded_ = received;
+            total_ = total;
+            return !cancelled_.load();
+          });
+      if (success && !cancelled_) {
+        state_ = State::Checking;
+        state_ = CheckWindowsInstaller(installer_, source_url_)
+                     ? State::Ready
+                     : State::SecurityBlocked;
+      } else {
+        state_ = State::Failed;
+      }
       if (cancelled_) state_ = State::Idle;
     });
   } catch (const std::exception& error) {
@@ -87,7 +99,6 @@ void WindowsUpdater::Start(const nlohmann::json& metadata) {
 
 void WindowsUpdater::Cancel() {
   cancelled_ = true;
-  if (client_) client_->stop();
   if (GetState() == State::Ready) state_ = State::Idle;
 }
 
@@ -98,22 +109,11 @@ void WindowsUpdater::Launch() {
       state != State::Launched)
     return;
   if (worker_.joinable()) worker_.join();
-  const std::wstring executable = installer_.wstring();
-  const std::wstring directory = installer_.parent_path().wstring();
   state_ = State::Launching;
-  SHELLEXECUTEINFOW info{};
-  info.cbSize = sizeof(info);
-  info.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
-  info.lpVerb = L"runas";
-  info.lpFile = executable.c_str();
-  info.lpDirectory = directory.c_str();
-  info.nShow = SW_SHOWNORMAL;
-  if (!ShellExecuteExW(&info)) {
-    LOG_WARN("Cannot launch Windows installer, error={}", GetLastError());
+  if (!LaunchWindowsInstaller(installer_, source_url_)) {
     state_ = State::LaunchFailed;
     return;
   }
-  if (info.hProcess) CloseHandle(info.hProcess);
   installer_launched_ = true;
   state_ = State::Launched;
   // NSIS already prompts to close CrossDesk and stops the installed service.

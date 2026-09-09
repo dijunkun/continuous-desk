@@ -286,7 +286,9 @@ function setup_targets()
         add_deps("rd_log")
         add_files("apps/desktop/src/version_checker/*.cpp")
         if is_os("windows") then
-            add_files("apps/desktop/src/platform/windows/windows_updater.cpp")
+            add_files("apps/desktop/src/platform/windows/windows_updater.cpp",
+                "apps/desktop/src/platform/windows/windows_installer.cpp")
+            add_links("winhttp", "ole32", "uuid")
         end
         add_includedirs("apps/desktop/src/version_checker", {public = true})
         if is_os("macosx") then

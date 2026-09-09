@@ -9,13 +9,9 @@
 
 #include <atomic>
 #include <filesystem>
-#include <memory>
 #include <nlohmann/json.hpp>
+#include <string>
 #include <thread>
-
-namespace httplib {
-class Client;
-}
 
 namespace crossdesk {
 
@@ -24,9 +20,11 @@ class WindowsUpdater {
   enum class State {
     Idle,
     Downloading,
+    Checking,
     Ready,
     Launching,
     Failed,
+    SecurityBlocked,
     LaunchFailed,
     Launched
   };
@@ -46,9 +44,9 @@ class WindowsUpdater {
   std::atomic<bool> cancelled_{false};
   std::atomic<uint64_t> downloaded_{0};
   std::atomic<uint64_t> total_{0};
-  std::shared_ptr<httplib::Client> client_;
   std::thread worker_;
   std::filesystem::path installer_;
+  std::string source_url_;
   bool installer_launched_ = false;
 };
 

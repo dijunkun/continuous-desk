@@ -3286,9 +3286,12 @@ void GuiApplication::SyncWindowsUpdate() {
   }
   const State state = windows_updater_.GetState();
   const bool downloading = state == State::Downloading;
-  ui_->main->set_update_downloading(downloading || state == State::Launching);
+  ui_->main->set_update_downloading(downloading || state == State::Checking ||
+                                    state == State::Launching);
+  ui_->main->set_update_security_blocked(state == State::SecurityBlocked);
   ui_->main->set_update_failed(state == State::Failed ||
-                               state == State::LaunchFailed);
+                               state == State::LaunchFailed ||
+                               state == State::SecurityBlocked);
   const int language = localization_language_index_;
   std::string status;
   if (downloading) {
@@ -3307,6 +3310,11 @@ void GuiApplication::SyncWindowsUpdate() {
     status = localization::update_download_failed[language];
   } else if (state == State::LaunchFailed) {
     status = localization::update_launch_failed[language];
+  } else if (state == State::Checking) {
+    status = localization::update_checking[language];
+    ui_->main->set_update_progress(1.0f);
+  } else if (state == State::SecurityBlocked) {
+    status = localization::update_security_blocked[language];
   } else if (state == State::Launching) {
     status = localization::update_launching[language];
   } else if (state == State::Launched) {
