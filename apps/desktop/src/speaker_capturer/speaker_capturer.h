@@ -24,6 +24,8 @@ class SpeakerCapturer {
   virtual int Destroy() = 0;
   virtual int Start() = 0;
   virtual int Stop() = 0;
+  // Called on the same control worker as Init/Start/Stop. Must not block.
+  virtual bool IsRunning() const = 0;
 };
 }  // namespace crossdesk
 #endif

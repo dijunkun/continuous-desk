@@ -168,14 +168,11 @@ void GuiRuntime::HandleServerControllerDisconnected(
 #else
   start_screen_capturer_ = false;
 #endif
-  start_speaker_capturer_ = false;
+  devices_.StopSpeakerCapturer();
   start_mouse_controller_ = false;
   start_keyboard_capturer_ = false;
   remote_client_id_.clear();
-  if (audio_capture_) {
-    devices_.StopSpeakerCapturer();
-    audio_capture_ = false;
-  }
+  audio_capture_ = false;
   devices_.ResetToInitialDisplay();
 }
 

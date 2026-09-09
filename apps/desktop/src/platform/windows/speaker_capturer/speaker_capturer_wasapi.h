@@ -14,24 +14,21 @@ namespace crossdesk {
 class SpeakerCapturerWasapi : public SpeakerCapturer {
  public:
   SpeakerCapturerWasapi();
-  ~SpeakerCapturerWasapi();
+  ~SpeakerCapturerWasapi() override;
 
  public:
-  virtual int Init(speaker_data_cb cb);
-  virtual int Destroy();
-  virtual int Start();
-  virtual int Stop();
+  int Init(speaker_data_cb cb) override;
+  int Destroy() override;
+  int Start() override;
+  int Stop() override;
+  bool IsRunning() const override;
 
   int Pause();
   int Resume();
 
-  speaker_data_cb GetCallback();
-
  private:
-  speaker_data_cb cb_ = nullptr;
-
- private:
-  bool inited_ = false;
+  class Impl;
+  Impl* impl_ = nullptr;
 };
 }  // namespace crossdesk
 #endif

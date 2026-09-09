@@ -2,47 +2,98 @@
 #import <Foundation/Foundation.h>
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
 
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#include <utility>
+
 #include "rd_log.h"
 #include "speaker_capturer_macosx.h"
 
-namespace crossdesk {
-class SpeakerCapturerMacosx;
+namespace {
+constexpr auto kCaptureTimeout = std::chrono::seconds(2);
+
+std::string NSErrorToString(NSError* error) {
+  if (!error) return "";
+  NSString* message = [NSString
+      stringWithFormat:@"%@ (%@:%ld), reason=%@", error.localizedDescription, error.domain,
+                       (long)error.code, error.localizedFailureReason ?: @""];
+  return message.UTF8String ?: "";
 }
 
-namespace {
-std::string NSErrorToString(NSError* error) {
-  if (!error) {
-    return "";
+// Late system replies own only their result, never the capturer or stack data.
+// Complete() also tells a late successful start to stop its abandoned stream.
+template <typename T>
+class CaptureReply {
+ public:
+  bool Complete(T value) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (expired_) return false;
+    value_ = std::move(value);
+    ready_ = true;
+    wake_.notify_one();
+    return true;
+  }
+  bool Wait(T& value) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (!wake_.wait_for(lock, kCaptureTimeout, [&] { return ready_; })) {
+      expired_ = true;
+      return false;
+    }
+    value = value_;
+    return true;
   }
 
-  const char* description = [error.localizedDescription UTF8String];
-  return description ? description : "";
-}
+ private:
+  std::mutex mutex_;
+  std::condition_variable wake_;
+  bool ready_ = false;
+  bool expired_ = false;
+  T value_{};
+};
+
+struct ContentReply {
+  SCShareableContent* content = nil;
+  NSError* error = nil;
+};
+struct StreamReply {
+  NSError* error = nil;
+};
+struct AudioCallbackState {
+  std::mutex mutex;
+  crossdesk::SpeakerCapturer::speaker_data_cb callback;
+  std::atomic<bool> running{false};
+};
 }  // namespace
 
-@interface SpeakerCaptureDelegate : NSObject <SCStreamDelegate, SCStreamOutput>
-@property(nonatomic, assign) crossdesk::SpeakerCapturerMacosx* owner;
-- (instancetype)initWithOwner:(crossdesk::SpeakerCapturerMacosx*)owner;
+@interface SpeakerCaptureDelegate : NSObject <SCStreamDelegate, SCStreamOutput> {
+  std::shared_ptr<AudioCallbackState> state_;
+}
+- (instancetype)initWithState:(std::shared_ptr<AudioCallbackState>)state;
 @end
 
 @implementation SpeakerCaptureDelegate
-- (instancetype)initWithOwner:(crossdesk::SpeakerCapturerMacosx*)owner {
+- (instancetype)initWithState:(std::shared_ptr<AudioCallbackState>)state {
   self = [super init];
-  if (self) {
-    _owner = owner;
-  }
+  if (self) state_ = std::move(state);
   return self;
+}
+
+- (void)stream:(SCStream*)stream didStopWithError:(NSError*)error {
+  state_->running = false;
+  SPDLOG_LOGGER_WARN(crossdesk::get_logger(), "System audio stream stopped: {}",
+                     NSErrorToString(error));
 }
 
 - (void)stream:(SCStream*)stream
     didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
                    ofType:(SCStreamOutputType)type {
   if (type != SCStreamOutputTypeAudio) return;
-
-  crossdesk::SpeakerCapturerMacosx* owner = _owner;
-  if (!owner || !owner->cb_) {
-    return;
-  }
+  const auto state = state_;
+  std::lock_guard<std::mutex> lock(state->mutex);
+  if (!state->callback || !state->running) return;
 
   CMBlockBufferRef blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer);
   if (!blockBuffer) {
@@ -51,8 +102,7 @@ std::string NSErrorToString(NSError* error) {
 
   size_t length = CMBlockBufferGetDataLength(blockBuffer);
   char* dataPtr = NULL;
-  OSStatus dataStatus =
-      CMBlockBufferGetDataPointer(blockBuffer, 0, NULL, NULL, &dataPtr);
+  OSStatus dataStatus = CMBlockBufferGetDataPointer(blockBuffer, 0, NULL, NULL, &dataPtr);
   if (dataStatus != noErr || dataPtr == nullptr || length == 0) {
     return;
   }
@@ -68,7 +118,7 @@ std::string NSErrorToString(NSError* error) {
     return;
   }
 
-  if (owner->cb_) {
+  if (state->callback) {
     std::vector<short> out_pcm16;
     if (asbd->mFormatFlags & kAudioFormatFlagIsFloat) {
       int channels = asbd->mChannelsPerFrame;
@@ -118,191 +168,156 @@ std::string NSErrorToString(NSError* error) {
     size_t total_bytes = out_pcm16.size() * sizeof(short);
     unsigned char* p = (unsigned char*)out_pcm16.data();
     for (size_t offset = 0; offset + frame_bytes <= total_bytes; offset += frame_bytes) {
-      if (!owner->cb_) {
+      if (!state->callback) {
         return;
       }
-      owner->cb_(p + offset, frame_bytes, "audio");
+      state->callback(p + offset, frame_bytes, "audio");
     }
   }
 }
-
 @end
 
 namespace crossdesk {
-
 class SpeakerCapturerMacosx::Impl {
  public:
-  SCStreamConfiguration* config = nil;
+  speaker_data_cb callback;
   SCStream* stream = nil;
   SpeakerCaptureDelegate* delegate = nil;
   dispatch_queue_t queue = nil;
-  SCShareableContent* content = nil;
-  SCDisplay* mainDisplay = nil;
-
-  ~Impl() {
-    if (stream) {
-      [stream stopCaptureWithCompletionHandler:^(NSError* _Nullable error){
-      }];
-      stream = nil;
-    }
-    delegate = nil;
-    if (queue) {
-      queue = nil;
-    }
-    content = nil;
-    mainDisplay = nil;
-    config = nil;
-  }
+  std::shared_ptr<AudioCallbackState> state;
 };
 
-SpeakerCapturerMacosx::SpeakerCapturerMacosx() {
-  impl_ = new Impl();
-  inited_ = false;
-  cb_ = nullptr;
-}
-
+SpeakerCapturerMacosx::SpeakerCapturerMacosx() : impl_(new Impl) {}
 SpeakerCapturerMacosx::~SpeakerCapturerMacosx() {
   Destroy();
   delete impl_;
-  impl_ = nullptr;
 }
 
 int SpeakerCapturerMacosx::Init(speaker_data_cb cb) {
-  if (inited_) {
-    return 0;
-  }
-  cb_ = cb;
-
-  impl_->config = [[SCStreamConfiguration alloc] init];
-  impl_->config.capturesAudio = YES;
-  impl_->config.sampleRate = 48000;
-  impl_->config.channelCount = 1;
-
-  dispatch_semaphore_t sema = dispatch_semaphore_create(0);
-  __block NSError* error = nil;
-  [SCShareableContent
-      getShareableContentWithCompletionHandler:^(SCShareableContent* c, NSError* e) {
-        impl_->content = c;
-        error = e;
-        dispatch_semaphore_signal(sema);
-      }];
-  dispatch_semaphore_wait(sema, DISPATCH_TIME_FOREVER);
-
-  if (error || !impl_->content) {
-    LOG_ERROR("Failed to get shareable content: {}",
-              NSErrorToString(error));
-    return -1;
-  }
-
-  CGDirectDisplayID mainDisplayId = CGMainDisplayID();
-  impl_->mainDisplay = nil;
-  for (SCDisplay* d in impl_->content.displays) {
-    if (d.displayID == mainDisplayId) {
-      impl_->mainDisplay = d;
-      break;
-    }
-  }
-  if (!impl_->mainDisplay) {
-    LOG_ERROR("Main display not found");
-    return -1;
-  }
-
-  if (!impl_->queue) {
+  impl_->callback = std::move(cb);
+  if (!impl_->queue)
     impl_->queue = dispatch_queue_create("SpeakerAudio.Queue", DISPATCH_QUEUE_SERIAL);
-  }
-
-  inited_ = true;
   return 0;
 }
 
 int SpeakerCapturerMacosx::Start() {
-  if (!inited_) {
-    return -1;
-  }
+  @autoreleasepool {
+    if (!impl_->callback) return -1;
+    if (IsRunning()) return 0;
+    if (Stop() != 0) return -1;
 
-  if (impl_->stream) {
-    dispatch_semaphore_t semaStop = dispatch_semaphore_create(0);
-    [impl_->stream stopCaptureWithCompletionHandler:^(NSError* error) {
-      dispatch_semaphore_signal(semaStop);
-    }];
-    dispatch_semaphore_wait(semaStop, DISPATCH_TIME_FOREVER);
-    impl_->stream = nil;
-    impl_->delegate = nil;
-  }
-
-  impl_->delegate = [[SpeakerCaptureDelegate alloc] initWithOwner:this];
-  SCContentFilter* filter = [[SCContentFilter alloc] initWithDisplay:impl_->mainDisplay
-                                                    excludingWindows:@[]];
-  impl_->stream = [[SCStream alloc] initWithFilter:filter
-                                     configuration:impl_->config
-                                          delegate:impl_->delegate];
-
-  NSError* addOutputError = nil;
-  BOOL ok = [impl_->stream addStreamOutput:impl_->delegate
-                                      type:SCStreamOutputTypeAudio
-                        sampleHandlerQueue:impl_->queue
-                                     error:&addOutputError];
-  if (!ok || addOutputError) {
-    LOG_ERROR("addStreamOutput error: {}",
-              NSErrorToString(addOutputError));
-    impl_->stream = nil;
-    impl_->delegate = nil;
-    return -1;
-  }
-
-  dispatch_semaphore_t semaStart = dispatch_semaphore_create(0);
-  __block int ret = 0;
-  [impl_->stream startCaptureWithCompletionHandler:^(NSError* _Nullable error) {
-    if (error) {
-      LOG_ERROR("startCaptureWithCompletionHandler error: {}",
-                NSErrorToString(error));
-      ret = -1;
+    // A cached SCDisplay becomes invalid after hotplug, sleep or a display
+    // reconfiguration. Obtain a fresh snapshot on every start/reconnection.
+    auto content_reply = std::make_shared<CaptureReply<ContentReply>>();
+    [SCShareableContent
+        getShareableContentWithCompletionHandler:^(SCShareableContent* content, NSError* error) {
+          content_reply->Complete({content, error});
+        }];
+    ContentReply content;
+    if (!content_reply->Wait(content)) {
+      LOG_ERROR("Timed out refreshing system audio capture displays");
+      return -1;
     }
-    dispatch_semaphore_signal(semaStart);
-  }];
-  dispatch_semaphore_wait(semaStart, DISPATCH_TIME_FOREVER);
+    if (content.error || !content.content) {
+      LOG_ERROR("Failed to refresh system audio capture displays: {}",
+                NSErrorToString(content.error));
+      return -1;
+    }
+    SCDisplay* display = nil;
+    const auto main_id = CGMainDisplayID();
+    for (SCDisplay* candidate in content.content.displays) {
+      if (candidate.displayID == main_id) {
+        display = candidate;
+        break;
+      }
+    }
+    if (!display) display = content.content.displays.firstObject;
+    if (!display) {
+      LOG_ERROR("No display available for system audio capture");
+      return -1;
+    }
+    LOG_INFO("Starting system audio capture with current display {}", display.displayID);
 
-  return ret;
+    SCStreamConfiguration* config = [[SCStreamConfiguration alloc] init];
+    config.capturesAudio = YES;
+    config.sampleRate = 48000;
+    config.channelCount = 1;
+    SCContentFilter* filter = [[SCContentFilter alloc] initWithDisplay:display
+                                                      excludingWindows:@[]];
+    impl_->state = std::make_shared<AudioCallbackState>();
+    impl_->state->callback = impl_->callback;
+    impl_->delegate = [[SpeakerCaptureDelegate alloc] initWithState:impl_->state];
+    impl_->stream = [[SCStream alloc] initWithFilter:filter
+                                       configuration:config
+                                            delegate:impl_->delegate];
+    NSError* output_error = nil;
+    if (!impl_->stream || ![impl_->stream addStreamOutput:impl_->delegate
+                                                     type:SCStreamOutputTypeAudio
+                                       sampleHandlerQueue:impl_->queue
+                                                    error:&output_error]) {
+      LOG_ERROR("Failed to attach system audio output: {}", NSErrorToString(output_error));
+      Stop();
+      return -1;
+    }
+
+    auto start_reply = std::make_shared<CaptureReply<StreamReply>>();
+    SCStream* stream = impl_->stream;
+    impl_->state->running = true;
+    [stream startCaptureWithCompletionHandler:^(NSError* error) {
+      if (!start_reply->Complete({error}) && !error) {
+        [stream stopCaptureWithCompletionHandler:nil];
+      }
+    }];
+    StreamReply started;
+    if (!start_reply->Wait(started)) {
+      LOG_ERROR("Timed out starting system audio capture");
+      Stop();
+      return -1;
+    }
+    if (started.error || !impl_->state->running) {
+      LOG_ERROR("Failed to start system audio capture: {}", NSErrorToString(started.error));
+      Stop();
+      return -1;
+    }
+    return 0;
+  }
 }
 
 int SpeakerCapturerMacosx::Stop() {
-  if (!inited_) return -1;
-  if (!impl_->stream) return -1;
-
-  dispatch_semaphore_t sema = dispatch_semaphore_create(0);
-  [impl_->stream stopCaptureWithCompletionHandler:^(NSError* error) {
-    if (error) {
-      LOG_ERROR("stopCaptureWithCompletionHandler error: {}",
-                NSErrorToString(error));
+  @autoreleasepool {
+    if (auto state = std::exchange(impl_->state, {})) {
+      std::lock_guard<std::mutex> lock(state->mutex);
+      state->running = false;
+      state->callback = nullptr;
     }
-    dispatch_semaphore_signal(sema);
-  }];
-  dispatch_semaphore_wait(sema, DISPATCH_TIME_FOREVER);
-
-  impl_->stream = nil;
-  impl_->delegate.owner = nullptr;
-  impl_->delegate = nil;
-
-  return 0;
+    SCStream* stream = impl_->stream;
+    impl_->stream = nil;
+    impl_->delegate = nil;
+    if (!stream) return 0;
+    auto stop_reply = std::make_shared<CaptureReply<StreamReply>>();
+    [stream stopCaptureWithCompletionHandler:^(NSError* error) {
+      stop_reply->Complete({error});
+    }];
+    StreamReply stopped;
+    if (!stop_reply->Wait(stopped)) {
+      LOG_ERROR("Timed out stopping system audio capture; callbacks revoked");
+      return -1;
+    }
+    // A start failure or daemon restart can leave an already stopped stream.
+    // Its references have been discarded, so future starts can recover.
+    if (stopped.error) LOG_WARN("System audio stop reply: {}", NSErrorToString(stopped.error));
+    return 0;
+  }
 }
+
+bool SpeakerCapturerMacosx::IsRunning() const { return impl_->state && impl_->state->running; }
 
 int SpeakerCapturerMacosx::Destroy() {
-  Stop();
-  cb_ = nullptr;
-
-  if (impl_) {
-    impl_->config = nil;
-    impl_->content = nil;
-    impl_->mainDisplay = nil;
-    if (impl_->queue) {
-      impl_->queue = nil;
-    }
-  }
-  inited_ = false;
-  return 0;
+  const int result = Stop();
+  impl_->callback = nullptr;
+  impl_->queue = nil;
+  return result;
 }
-
-int SpeakerCapturerMacosx::Pause() { return 0; }
-
+int SpeakerCapturerMacosx::Pause() { return Stop(); }
 int SpeakerCapturerMacosx::Resume() { return Start(); }
 }  // namespace crossdesk

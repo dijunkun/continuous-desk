@@ -17,21 +17,19 @@ namespace crossdesk {
 class SpeakerCapturerMacosx : public SpeakerCapturer {
  public:
   SpeakerCapturerMacosx();
-  ~SpeakerCapturerMacosx();
+  ~SpeakerCapturerMacosx() override;
 
  public:
-  virtual int Init(speaker_data_cb cb);
-  virtual int Destroy();
-  virtual int Start();
-  virtual int Stop();
+  int Init(speaker_data_cb cb) override;
+  int Destroy() override;
+  int Start() override;
+  int Stop() override;
+  bool IsRunning() const override;
 
   int Pause();
   int Resume();
 
- public:
-  speaker_data_cb cb_ = nullptr;
-  bool inited_ = false;
-
+ private:
   class Impl;
   Impl* impl_ = nullptr;
 };

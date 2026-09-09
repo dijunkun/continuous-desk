@@ -468,7 +468,7 @@ void PeerEventHandler::OnConnectionStatus(ConnectionStatus status,
                                                      std::memory_order_release);
         runtime->is_server_mode_ = true;
         runtime->start_screen_capturer_ = true;
-        runtime->start_speaker_capturer_ = true;
+        runtime->devices_.StartSpeakerCapturer();
         runtime->remote_client_id_ = remote_id;
         runtime->start_mouse_controller_ = true;
         {

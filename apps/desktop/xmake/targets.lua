@@ -193,13 +193,15 @@ function setup_targets()
         set_kind("object")
         add_deps("rd_log", "crossdesk_wire")
         add_includedirs("apps/desktop/src/speaker_capturer", {public = true})
+        add_files("apps/desktop/src/speaker_capturer/speaker_capture_controller.cpp")
         if is_os("windows") then
             add_packages("miniaudio")
             add_files("apps/desktop/src/platform/windows/speaker_capturer/*.cpp")
             add_includedirs("apps/desktop/src/platform/windows/speaker_capturer")
         elseif is_os("macosx") then
-            add_files("apps/desktop/src/platform/macos/speaker_capturer/*.cpp",
-                "apps/desktop/src/platform/macos/speaker_capturer/*.mm")
+            add_files("apps/desktop/src/platform/macos/speaker_capturer/*.cpp")
+            add_files("apps/desktop/src/platform/macos/speaker_capturer/*.mm",
+                {mxxflags = "-fobjc-arc"})
             add_includedirs("apps/desktop/src/platform/macos/speaker_capturer")
         elseif is_os("linux") then
             add_files("apps/desktop/src/platform/linux/speaker_capturer/*.cpp")

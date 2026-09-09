@@ -298,9 +298,9 @@ void PeerEventHandler::OnReceiveDataBuffer(
       runtime->devices_.SendMouseCommand(remote_action,
                                         runtime->selected_display_);
     } else if (remote_action.type == ControlType::audio_capture) {
-      if (remote_action.a && !runtime->start_speaker_capturer_)
+      if (remote_action.a)
         runtime->devices_.StartSpeakerCapturer();
-      else if (!remote_action.a && runtime->start_speaker_capturer_)
+      else
         runtime->devices_.StopSpeakerCapturer();
     } else if (remote_action.type == ControlType::keyboard) {
       runtime->keyboard_.ApplyRemoteEvent(remote_id, remote_action);

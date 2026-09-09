@@ -1,5 +1,12 @@
-#ifndef CROSSDESK_GUI_SESSION_DEVICE_MANAGER_H_
-#define CROSSDESK_GUI_SESSION_DEVICE_MANAGER_H_
+/*
+ * @Author: DI JUNKUN
+ * @Date: 2026-09-09
+ * Copyright (c) 2026 by DI JUNKUN, All Rights Reserved.
+ */
+
+#ifndef _SESSION_DEVICE_MANAGER_H_
+#define _SESSION_DEVICE_MANAGER_H_
+
 
 #include <SDL3/SDL.h>
 
@@ -17,7 +24,7 @@
 #include "device_controller_factory.h"
 #include "display_info.h"
 #include "screen_capturer_factory.h"
-#include "speaker_capturer_factory.h"
+#include "speaker_capture_controller.h"
 
 namespace crossdesk {
 
@@ -29,6 +36,7 @@ class GuiRuntime;
 class SessionDeviceManager {
 public:
   explicit SessionDeviceManager(GuiRuntime &owner);
+  ~SessionDeviceManager();
 
   void Initialize();
   void UpdateInteractions();
@@ -38,8 +46,10 @@ public:
   int InitializeScreenCapturer();
   int StartScreenCapturer();
   int StopScreenCapturer();
-  int StartSpeakerCapturer();
-  int StopSpeakerCapturer();
+  // Requests are asynchronous; Stop drains/revokes audio delivery before
+  // returning so the connection peer can be destroyed safely.
+  void StartSpeakerCapturer();
+  void StopSpeakerCapturer();
   int StartMouseController();
   int StopMouseController();
   int StartKeyboardCapturer();
@@ -76,8 +86,7 @@ private:
   SDL_AudioStream *output_stream_ = nullptr;
   ScreenCapturerFactory *screen_capturer_factory_ = nullptr;
   ScreenCapturer *screen_capturer_ = nullptr;
-  SpeakerCapturerFactory *speaker_capturer_factory_ = nullptr;
-  SpeakerCapturer *speaker_capturer_ = nullptr;
+  SpeakerCaptureController speaker_capture_;
   DeviceControllerFactory *device_controller_factory_ = nullptr;
   MouseController *mouse_controller_ = nullptr;
   KeyboardCapturer *keyboard_capturer_ = nullptr;
@@ -93,4 +102,4 @@ private:
 
 } // namespace crossdesk
 
-#endif // CROSSDESK_GUI_SESSION_DEVICE_MANAGER_H_
+#endif

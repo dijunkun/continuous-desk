@@ -9,6 +9,7 @@
 #include "platform.h"
 #include "rd_log.h"
 #include "runtime/gui_runtime.h"
+#include "speaker_capturer_factory.h"
 
 namespace crossdesk {
 namespace {
@@ -19,7 +20,23 @@ constexpr auto kFrameDeadlineTolerance = std::chrono::milliseconds(1);
 
 } // namespace
 
-SessionDeviceManager::SessionDeviceManager(GuiRuntime &owner) : owner_(owner) {}
+SessionDeviceManager::SessionDeviceManager(GuiRuntime &owner)
+    : owner_(owner),
+      speaker_capture_(
+          [] {
+            return std::unique_ptr<SpeakerCapturer>(
+                SpeakerCapturerFactory().Create());
+          },
+          [this](unsigned char *data, size_t size, const char *) {
+            if (!owner_.peer_) return;
+            MiniRtcAudioFrame frame{};
+            frame.data = reinterpret_cast<const char *>(data);
+            frame.size = size;
+            frame.captured_timestamp = GetSystemTimeMicros(owner_.peer_);
+            SendAudioFrame(owner_.peer_, &frame, owner_.audio_label_.c_str());
+          }) {}
+
+SessionDeviceManager::~SessionDeviceManager() { speaker_capture_.Shutdown(); }
 
 bool SessionDeviceManager::ShouldSendCapturedFrame(
     std::chrono::steady_clock::time_point now, int fps) {
@@ -41,7 +58,6 @@ bool SessionDeviceManager::ShouldSendCapturedFrame(
 void SessionDeviceManager::Initialize() {
   InitializeAudioOutput();
   screen_capturer_factory_ = new ScreenCapturerFactory();
-  speaker_capturer_factory_ = new SpeakerCapturerFactory();
   device_controller_factory_ = new DeviceControllerFactory();
   keyboard_capturer_ =
       static_cast<KeyboardCapturer *>(device_controller_factory_->Create(
@@ -200,45 +216,12 @@ int SessionDeviceManager::StopScreenCapturer() {
   return 0;
 }
 
-int SessionDeviceManager::StartSpeakerCapturer() {
-  if (!speaker_capturer_) {
-    speaker_capturer_ =
-        static_cast<SpeakerCapturer *>(speaker_capturer_factory_->Create());
-    const int init_ret = speaker_capturer_->Init(
-        [this](unsigned char *data, size_t size, const char *audio_name) {
-          MiniRtcAudioFrame frame{};
-          frame.data = reinterpret_cast<const char *>(data);
-          frame.size = size;
-          frame.captured_timestamp = GetSystemTimeMicros(owner_.peer_);
-          SendAudioFrame(owner_.peer_, &frame, owner_.audio_label_.c_str());
-        });
-
-    if (init_ret != 0) {
-      speaker_capturer_->Destroy();
-      delete speaker_capturer_;
-      speaker_capturer_ = nullptr;
-    }
-  }
-
-  if (!speaker_capturer_) {
-    return -1;
-  }
-
-  const int ret = speaker_capturer_->Start();
-  if (ret != 0) {
-    LOG_ERROR("Start speaker capturer failed: {}", ret);
-    return ret;
-  }
-  owner_.start_speaker_capturer_ = true;
-  return 0;
+void SessionDeviceManager::StartSpeakerCapturer() {
+  speaker_capture_.SetEnabled(true);
 }
 
-int SessionDeviceManager::StopSpeakerCapturer() {
-  if (speaker_capturer_) {
-    speaker_capturer_->Stop();
-    owner_.start_speaker_capturer_ = false;
-  }
-  return 0;
+void SessionDeviceManager::StopSpeakerCapturer() {
+  speaker_capture_.SetEnabled(false);
 }
 
 int SessionDeviceManager::StartMouseController() {
@@ -448,16 +431,6 @@ void SessionDeviceManager::UpdateInteractions() {
     owner_.screen_capturer_is_started_ = false;
   }
 
-  if (owner_.start_speaker_capturer_ && !owner_.speaker_capturer_is_started_) {
-    if (StartSpeakerCapturer() == 0) {
-      owner_.speaker_capturer_is_started_ = true;
-    }
-  } else if (!owner_.start_speaker_capturer_ &&
-             owner_.speaker_capturer_is_started_) {
-    StopSpeakerCapturer();
-    owner_.speaker_capturer_is_started_ = false;
-  }
-
   if (owner_.start_mouse_controller_ && !owner_.mouse_controller_is_started_) {
     if (StartMouseController() == 0) {
       owner_.mouse_controller_is_started_ = true;
@@ -556,6 +529,7 @@ SessionDeviceManager::display_info_list() const {
 }
 
 void SessionDeviceManager::DestroyDevices() {
+  speaker_capture_.Shutdown();
   if (mouse_controller_) {
     mouse_controller_->Destroy();
     delete mouse_controller_;
@@ -566,11 +540,6 @@ void SessionDeviceManager::DestroyDevices() {
     delete screen_capturer_;
     screen_capturer_ = nullptr;
   }
-  if (speaker_capturer_) {
-    speaker_capturer_->Destroy();
-    delete speaker_capturer_;
-    speaker_capturer_ = nullptr;
-  }
   if (keyboard_capturer_) {
     delete keyboard_capturer_;
     keyboard_capturer_ = nullptr;
@@ -580,8 +549,6 @@ void SessionDeviceManager::DestroyDevices() {
 void SessionDeviceManager::DestroyFactories() {
   delete screen_capturer_factory_;
   screen_capturer_factory_ = nullptr;
-  delete speaker_capturer_factory_;
-  speaker_capturer_factory_ = nullptr;
   delete device_controller_factory_;
   device_controller_factory_ = nullptr;
 }

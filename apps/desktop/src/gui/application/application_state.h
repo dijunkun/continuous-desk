@@ -66,8 +66,6 @@ struct InteractionState {
   bool mouse_controller_is_started_ = false;
   bool start_screen_capturer_ = false;
   bool screen_capturer_is_started_ = false;
-  bool start_speaker_capturer_ = false;
-  bool speaker_capturer_is_started_ = false;
   bool start_keyboard_capturer_ = false;
   bool show_cursor_ = false;
   bool keyboard_capturer_is_started_ = false;
