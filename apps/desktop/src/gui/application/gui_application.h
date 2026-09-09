@@ -16,6 +16,9 @@
 
 #include "runtime/cursor_state_provider.h"
 #include "runtime/gui_runtime.h"
+#if _WIN32
+#include "platform/windows/windows_updater.h"
+#endif
 
 namespace crossdesk {
 
@@ -52,6 +55,9 @@ private:
   void HandlePasswordChangeResult();
   void HandleCredentialRecovery();
   void SyncMainWindow();
+#if _WIN32
+  void SyncWindowsUpdate();
+#endif
   void SyncConnectionDialog();
   void SyncPlatformDialogs();
   void SyncStreamWindow();
@@ -87,6 +93,9 @@ private:
   bool OpenUrl(const std::string &url);
 
   std::unique_ptr<SlintUi> ui_;
+#if _WIN32
+  WindowsUpdater windows_updater_;
+#endif
   CursorStateProvider cursor_state_provider_;
   std::unordered_map<std::string, CursorDeliveryState>
       cursor_delivery_states_;

@@ -184,6 +184,20 @@ struct TranslationRow {
   X(notification, u8"通知", "Notification", u8"Уведомление")                   \
   X(new_version_available, u8"新版本可用", "New Version Available",            \
     u8"Доступна новая версия")                                                 \
+  X(update_downloading, u8"正在下载安装包…", "Downloading installer…",        \
+    u8"Загрузка установщика…")                                                 \
+  X(update_launching, u8"正在打开安装包，请确认管理员权限请求…",               \
+    "Opening installer. Please confirm the administrator permission request…", \
+    u8"Запуск установщика. Подтвердите запрос прав администратора…")           \
+  X(update_download_failed, u8"下载失败，请点击更新重试，或访问官网。",         \
+    "Download failed. Click Update to retry, or visit the website.",           \
+    u8"Ошибка загрузки. Повторите обновление или откройте сайт.")              \
+  X(update_launch_failed, u8"安装包未能启动或授权已取消，请点击更新重试。",     \
+    "Installer launch failed or permission was cancelled. Click Update to retry.", \
+    u8"Установщик не запущен или доступ отменён. Повторите обновление.")        \
+  X(update_installer_opened, u8"安装包已打开，请在安装向导中完成更新。",         \
+    "Installer opened. Follow the setup wizard to finish updating.",          \
+    u8"Установщик открыт. Следуйте указаниям мастера установки.")              \
   X(release_notes, u8"更新内容", "Release Notes", u8"Содержание обновления") \
   X(version, u8"版本", "Version", u8"Версия")                                  \
   X(release_date, u8"发布日期: ", "Release Date: ", u8"Дата релиза: ")         \

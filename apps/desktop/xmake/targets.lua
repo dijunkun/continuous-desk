@@ -285,6 +285,9 @@ function setup_targets()
         add_defines("CROSSDESK_VERSION=\"" .. (get_config("CROSSDESK_VERSION") or "Unknown") .. "\"")
         add_deps("rd_log")
         add_files("apps/desktop/src/version_checker/*.cpp")
+        if is_os("windows") then
+            add_files("apps/desktop/src/platform/windows/windows_updater.cpp")
+        end
         add_includedirs("apps/desktop/src/version_checker", {public = true})
         if is_os("macosx") then
             add_defines("CPPHTTPLIB_USE_CERTS_FROM_MACOSX_KEYCHAIN")

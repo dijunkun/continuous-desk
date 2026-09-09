@@ -1413,6 +1413,21 @@ void GuiApplication::BindMainCallbacks() {
                                    : slint::SharedString{});
   });
   main->on_open_download([this] { OpenUrl("https://crossdesk.cn"); });
+  main->on_start_update([this] {
+#if _WIN32
+    windows_updater_.Start(latest_version_info_);
+    SyncWindowsUpdate();
+#else
+    OpenUrl("https://crossdesk.cn");
+    ui_->main->set_update_open(false);
+#endif
+  });
+  main->on_cancel_update([this] {
+#if _WIN32
+    windows_updater_.Cancel();
+#endif
+    ui_->main->set_update_open(false);
+  });
   main->on_connection_cancel([this] {
     const auto props = FindRemoteSession(ui_->connection_dialog_remote_id);
     if (!props) {
@@ -2100,6 +2115,9 @@ void GuiApplication::SyncMainWindow() {
   ui_->main->set_signal_tls_error(signal_status_ ==
                                   SignalStatus::SignalTlsCertError);
   ui_->main->set_update_available(update_available_);
+#if _WIN32
+  SyncWindowsUpdate();
+#endif
   ui_->main->set_current_version(CROSSDESK_VERSION);
   ui_->main->set_latest_version(UiText(latest_version_));
   ui_->main->set_release_name(UiText(release_name_));
@@ -3257,7 +3275,51 @@ bool GuiApplication::OpenUrl(const std::string& url) {
   return SDL_OpenURL(url.c_str());
 }
 
+#if _WIN32
+void GuiApplication::SyncWindowsUpdate() {
+  using State = WindowsUpdater::State;
+  if (windows_updater_.GetState() == State::Ready) {
+    windows_updater_.Launch();
+    if (windows_updater_.GetState() == State::Launched) {
+      ui_->main->set_update_open(false);
+    }
+  }
+  const State state = windows_updater_.GetState();
+  const bool downloading = state == State::Downloading;
+  ui_->main->set_update_downloading(downloading || state == State::Launching);
+  ui_->main->set_update_failed(state == State::Failed ||
+                               state == State::LaunchFailed);
+  const int language = localization_language_index_;
+  std::string status;
+  if (downloading) {
+    status = localization::update_downloading[language];
+    const uint64_t total = windows_updater_.Total();
+    const uint64_t received = windows_updater_.Downloaded();
+    if (total > 0) {
+      const int percent = static_cast<int>(std::min(100.0, 100.0 * received / total));
+      status += " " + std::to_string(percent) + "%";
+      ui_->main->set_update_progress(static_cast<float>(percent) / 100.0f);
+    } else {
+      status += " " + std::to_string(received / (1024 * 1024)) + " MB";
+      ui_->main->set_update_progress(-1.0f);
+    }
+  } else if (state == State::Failed) {
+    status = localization::update_download_failed[language];
+  } else if (state == State::LaunchFailed) {
+    status = localization::update_launch_failed[language];
+  } else if (state == State::Launching) {
+    status = localization::update_launching[language];
+  } else if (state == State::Launched) {
+    status = localization::update_installer_opened[language];
+  }
+  ui_->main->set_update_status(UiText(status));
+}
+#endif
+
 void GuiApplication::Cleanup() {
+#if _WIN32
+  windows_updater_.Cancel();
+#endif
   if (!ui_) {
     SDL_Quit();
     return;
