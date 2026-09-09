@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file-set product-name="CrossDesk"
+                 product-version="${version}"
+                 file-version="${version}"
+                 company-name="CrossDesk"
+                 copyright="Copyright (C) CrossDesk contributors">
+      <include path="crossdesk.exe" original-filename="CrossDesk.exe" />
+      <include path="crossdesk_service.exe" original-filename="crossdesk_service.exe" />
+      <include path="crossdesk_session_helper.exe" original-filename="crossdesk_session_helper.exe" />
+      <include path="wgc_plugin.dll" original-filename="wgc_plugin.dll" />
+      <for-each>
+        <authenticode-sign />
+      </for-each>
+    </pe-file-set>
+  </zip-file>
+</artifact-configuration>

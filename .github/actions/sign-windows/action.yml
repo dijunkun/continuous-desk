@@ -1,0 +1,62 @@
+name: Sign Windows artifact
+description: Submit one raw EXE or ZIP to SignPath and download the signed result.
+inputs:
+  api-token:
+    description: SignPath submitter token.
+    required: true
+  organization-id:
+    description: SignPath organization ID.
+    required: true
+  signing-policy:
+    description: test-signing or release-signing.
+    required: true
+  artifact-configuration:
+    description: Artifact configuration slug in the crossdesk project.
+    required: true
+  artifact:
+    description: Absolute path to one EXE or ZIP file.
+    required: true
+  output-directory:
+    description: Absolute directory for the downloaded signed file.
+    required: true
+  version:
+    description: CrossDesk ProductVersion and FileVersion.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Upload unsigned artifact
+      id: unsigned
+      uses: actions/upload-artifact@v7
+      with:
+        path: ${{ inputs.artifact }}
+        archive: false
+        if-no-files-found: error
+        retention-days: 7
+
+    - name: Submit signing request and wait for approval
+      id: sign
+      uses: signpath/github-action-submit-signing-request@v2
+      with:
+        api-token: ${{ inputs.api-token }}
+        organization-id: ${{ inputs.organization-id }}
+        project-slug: crossdesk
+        signing-policy-slug: ${{ inputs.signing-policy }}
+        artifact-configuration-slug: ${{ inputs.artifact-configuration }}
+        github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+        wait-for-completion: true
+        wait-for-completion-timeout-in-seconds: 3600
+        output-artifact-directory: ${{ inputs.output-directory }}
+        skip-decompress: true
+        parameters: |
+          version: ${{ toJSON(inputs.version) }}
+
+    - name: Record signing request
+      if: always() && steps.sign.outputs.signing-request-web-url != ''
+      shell: pwsh
+      env:
+        SIGNING_REQUEST_URL: ${{ steps.sign.outputs.signing-request-web-url }}
+        SIGNING_CONFIGURATION: ${{ inputs.artifact-configuration }}
+        SIGNING_POLICY: ${{ inputs.signing-policy }}
+      run: |
+        "- $env:SIGNING_CONFIGURATION ($env:SIGNING_POLICY): $env:SIGNING_REQUEST_URL" >> $env:GITHUB_STEP_SUMMARY

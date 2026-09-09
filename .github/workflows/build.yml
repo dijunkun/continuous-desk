@@ -14,7 +14,17 @@ on:
         required: false
         default: "0"
       sign_windows_test:
-        description: "Submit the Windows installer to SignPath using test-signing."
+        description: "Test-sign Windows binaries and installer (Actions artifacts only)."
+        required: false
+        type: boolean
+        default: false
+      sign_windows_release:
+        description: "Test release-signing with the production certificate (Actions artifacts only)."
+        required: false
+        type: boolean
+        default: false
+      windows_only:
+        description: "Build only Windows, for signing tests."
         required: false
         type: boolean
         default: false
@@ -28,6 +38,7 @@ env:
 
 jobs:
   build-linux:
+    if: github.event_name != 'workflow_dispatch' || !inputs.windows_only
     name: Build Linux (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -176,6 +187,7 @@ jobs:
 
   # macOS
   build-macos:
+    if: github.event_name != 'workflow_dispatch' || !inputs.windows_only
     name: Build on macOS
     runs-on: ${{ matrix.runner }}
     env:
@@ -308,6 +320,7 @@ jobs:
 
   # iOS
   build-ios:
+    if: github.event_name != 'workflow_dispatch' || !inputs.windows_only
     name: Build on iOS (arm64)
     runs-on: macos-26
     timeout-minutes: 120
@@ -504,9 +517,37 @@ jobs:
   build-windows-x64:
     name: Build on Windows x64
     runs-on: windows-2022
+    timeout-minutes: 240
+    outputs:
+      signing-policy: ${{ steps.signing.outputs.policy }}
     env:
       XMAKE_GLOBALDIR: D:\xmake_global
     steps:
+      - name: Select Windows signing policy
+        id: signing
+        shell: pwsh
+        env:
+          TEST_SIGNING: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_windows_test }}
+          RELEASE_SIGNING: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_windows_release }}
+          PUBLISH_RELEASE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+        run: |
+          if ($env:TEST_SIGNING -eq 'true' -and $env:RELEASE_SIGNING -eq 'true') {
+            throw 'Select only one of sign_windows_test and sign_windows_release.'
+          }
+          $policy = ''
+          if ($env:PUBLISH_RELEASE -eq 'true' -or $env:RELEASE_SIGNING -eq 'true') {
+            $policy = 'release-signing'
+          } elseif ($env:TEST_SIGNING -eq 'true') {
+            $policy = 'test-signing'
+          }
+          if ($policy -and (!$env:SIGNPATH_API_TOKEN -or !$env:SIGNPATH_ORGANIZATION_ID)) {
+            throw 'Signing requires SIGNPATH_API_TOKEN and SIGNPATH_ORGANIZATION_ID.'
+          }
+          "policy=$policy" >> $env:GITHUB_OUTPUT
+          "Windows signing policy: $(if ($policy) { $policy } else { 'unsigned development build' })" >> $env:GITHUB_STEP_SUMMARY
+
       - name: Extract version number
         shell: pwsh
         run: |
@@ -611,66 +652,98 @@ jobs:
           $nsisPluginDir = "C:\Program Files (x86)\NSIS\Plugins\x86-unicode"
           copy "${{ github.workspace }}\apps\desktop\scripts\windows\nsProcess.dll" $nsisPluginDir
 
+      - name: Test Windows signing helpers
+        shell: pwsh
+        run: ./apps/desktop/tests/windows_signing_test.ps1
+
       - name: Build CrossDesk
         run: |
           xmake f --CROSSDESK_VERSION=${{ env.VERSION_NUM }} --USE_CUDA=true -y
           xmake b -vy crossdesk
+
+      - name: Prepare installer binaries for signing
+        if: steps.signing.outputs.policy != ''
+        shell: pwsh
+        run: |
+          ./apps/desktop/scripts/windows/signpath-artifact.ps1 -Operation PrepareBinaries -Directory ./build/windows/x64/release -Artifact ./signpath/unsigned/installer-binaries.zip
+
+      - name: Sign installer binaries
+        if: steps.signing.outputs.policy != ''
+        uses: ./.github/actions/sign-windows
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          signing-policy: ${{ steps.signing.outputs.policy }}
+          artifact-configuration: windows-binaries
+          artifact: ${{ github.workspace }}/signpath/unsigned/installer-binaries.zip
+          output-directory: ${{ github.workspace }}/signpath/signed/installer-binaries
+          version: ${{ env.VERSION_NUM }}
+
+      - name: Verify and restore signed installer binaries
+        if: steps.signing.outputs.policy != ''
+        shell: pwsh
+        env:
+          SIGNING_POLICY: ${{ steps.signing.outputs.policy }}
+        run: |
+          ./apps/desktop/scripts/windows/signpath-artifact.ps1 -Operation RestoreBinaries -Directory ./build/windows/x64/release -Artifact ./signpath/signed/installer-binaries/installer-binaries.zip -SigningPolicy $env:SIGNING_POLICY
 
       - name: Package
         shell: pwsh
         run: |
           & "${{ github.workspace }}\apps\desktop\scripts\windows\pkg_x64.ps1" $env:VERSION_NUM
 
-      - name: Upload unsigned Windows installer for test signing
-        if: github.event_name == 'workflow_dispatch' && inputs.sign_windows_test
-        id: upload-unsigned-windows-installer
-        uses: actions/upload-artifact@v7
-        with:
-          path: ${{ github.workspace }}/apps/desktop/scripts/windows/crossdesk-win-x64-${{ env.VERSION_NUM }}.exe
-          archive: false
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Sign Windows installer with SignPath test certificate
-        if: github.event_name == 'workflow_dispatch' && inputs.sign_windows_test
-        uses: signpath/github-action-submit-signing-request@v2
+      - name: Sign Windows installer
+        if: steps.signing.outputs.policy != ''
+        uses: ./.github/actions/sign-windows
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: crossdesk
-          signing-policy-slug: test-signing
-          github-artifact-id: ${{ steps.upload-unsigned-windows-installer.outputs.artifact-id }}
-          wait-for-completion: true
-          output-artifact-directory: ${{ github.workspace }}\signpath\signed-installer
-          skip-decompress: true
-          parameters: |
-            version: ${{ toJSON(env.VERSION_NUM) }}
+          signing-policy: ${{ steps.signing.outputs.policy }}
+          artifact-configuration: initial
+          artifact: ${{ github.workspace }}/apps/desktop/scripts/windows/crossdesk-win-x64-${{ env.VERSION_NUM }}.exe
+          output-directory: ${{ github.workspace }}/signpath/signed/installer
+          version: ${{ env.VERSION_NUM }}
 
-      - name: Verify and use test-signed Windows installer
-        if: github.event_name == 'workflow_dispatch' && inputs.sign_windows_test
+      - name: Verify and use signed Windows installer
+        if: steps.signing.outputs.policy != ''
         shell: pwsh
+        env:
+          SIGNING_POLICY: ${{ steps.signing.outputs.policy }}
         run: |
-          $installerName = "crossdesk-win-x64-${{ env.VERSION_NUM }}.exe"
-          $signedInstaller = Join-Path "${{ github.workspace }}\signpath\signed-installer" $installerName
-          $destination = Join-Path "${{ github.workspace }}\apps\desktop\scripts\windows" $installerName
-
-          if (!(Test-Path $signedInstaller)) {
-            throw "SignPath did not return the signed installer: $signedInstaller"
-          }
-
-          $signature = Get-AuthenticodeSignature $signedInstaller
-          if (!$signature.SignerCertificate -or $signature.Status -eq "NotSigned") {
-            throw "SignPath returned an installer without an Authenticode signature."
-          }
-
-          Write-Host "Signer: $($signature.SignerCertificate.Subject)"
-          Write-Host "Signature status: $($signature.Status)"
-          Copy-Item $signedInstaller $destination -Force
+          $installerName = "crossdesk-win-x64-$env:VERSION_NUM.exe"
+          ./apps/desktop/scripts/windows/signpath-artifact.ps1 -Operation VerifyInstaller -Artifact "./signpath/signed/installer/$installerName" -SigningPolicy $env:SIGNING_POLICY
+          Copy-Item "./signpath/signed/installer/$installerName" ./apps/desktop/scripts/windows/ -Force
 
       - name: Build Portable CrossDesk
         run: |
           xmake f --CROSSDESK_VERSION=${{ env.VERSION_NUM }} --USE_CUDA=true --CROSSDESK_PORTABLE=true -y
           xmake b -vy crossdesk
+
+      - name: Prepare portable binaries for signing
+        if: steps.signing.outputs.policy != ''
+        shell: pwsh
+        run: |
+          ./apps/desktop/scripts/windows/signpath-artifact.ps1 -Operation PrepareBinaries -Directory ./build/windows/x64/release -Artifact ./signpath/unsigned/portable-binaries.zip
+
+      - name: Sign portable binaries
+        if: steps.signing.outputs.policy != ''
+        uses: ./.github/actions/sign-windows
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          signing-policy: ${{ steps.signing.outputs.policy }}
+          artifact-configuration: windows-binaries
+          artifact: ${{ github.workspace }}/signpath/unsigned/portable-binaries.zip
+          output-directory: ${{ github.workspace }}/signpath/signed/portable-binaries
+          version: ${{ env.VERSION_NUM }}
+
+      - name: Verify and restore signed portable binaries
+        if: steps.signing.outputs.policy != ''
+        shell: pwsh
+        env:
+          SIGNING_POLICY: ${{ steps.signing.outputs.policy }}
+        run: |
+          ./apps/desktop/scripts/windows/signpath-artifact.ps1 -Operation RestoreBinaries -Directory ./build/windows/x64/release -Artifact ./signpath/signed/portable-binaries/portable-binaries.zip -SigningPolicy $env:SIGNING_POLICY
 
       - name: Package Portable
         shell: pwsh
@@ -719,7 +792,7 @@ jobs:
 
   release:
     name: Publish Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.build-windows-x64.outputs.signing-policy == 'release-signing'
     needs: [build-linux, build-macos, build-ios, build-windows-x64]
     runs-on: ubuntu-latest
 
