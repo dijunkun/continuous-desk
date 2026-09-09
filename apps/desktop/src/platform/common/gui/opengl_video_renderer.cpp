@@ -122,6 +122,11 @@ struct OpenGlFunctions {
   PFNGLUNIFORM4FPROC uniform_4f = nullptr;
   PFNGLUSEPROGRAMPROC use_program = nullptr;
   PFNGLVERTEXATTRIBPOINTERPROC vertex_attrib_pointer = nullptr;
+  PFNGLGENFRAMEBUFFERSPROC gen_framebuffers = nullptr;
+  PFNGLDELETEFRAMEBUFFERSPROC delete_framebuffers = nullptr;
+  PFNGLBINDFRAMEBUFFERPROC bind_framebuffer = nullptr;
+  PFNGLFRAMEBUFFERTEXTURE2DPROC framebuffer_texture_2d = nullptr;
+  PFNGLCHECKFRAMEBUFFERSTATUSPROC check_framebuffer_status = nullptr;
 #if CROSSDESK_OPENGL_CUDA_INTEROP
   PFNGLFENCESYNCPROC fence_sync = nullptr;
   PFNGLCLIENTWAITSYNCPROC client_wait_sync = nullptr;
@@ -161,6 +166,15 @@ struct OpenGlFunctions {
            LoadOpenGlFunction(&uniform_4f, "glUniform4f") &&
            LoadOpenGlFunction(&use_program, "glUseProgram") &&
            LoadOpenGlFunction(&vertex_attrib_pointer, "glVertexAttribPointer");
+  }
+
+  bool LoadFramebufferFunctions() {
+    return LoadOpenGlFunction(&gen_framebuffers, "glGenFramebuffers") &&
+           LoadOpenGlFunction(&delete_framebuffers, "glDeleteFramebuffers") &&
+           LoadOpenGlFunction(&bind_framebuffer, "glBindFramebuffer") &&
+           LoadOpenGlFunction(&framebuffer_texture_2d, "glFramebufferTexture2D") &&
+           LoadOpenGlFunction(&check_framebuffer_status,
+                              "glCheckFramebufferStatus");
   }
 
 #if CROSSDESK_OPENGL_CUDA_INTEROP
@@ -287,6 +301,17 @@ struct OpenGlVideoRenderer::Impl {
   GLint video_rect_location = -1;
   GLint corner_radius_location = -1;
   GLint video_enabled_location = -1;
+  GLint source_size_location = -1;
+  GLint filter_direction_location = -1;
+  GLint packed_video_location = -1;
+  GLuint scale_framebuffer = 0;
+  std::array<GLuint, 2> scale_textures{};
+  std::array<std::pair<int, int>, 2> scale_sizes{};
+  uint64_t scaled_sequence = 0;
+  bool scaling_available = false;
+  GLenum framebuffer_target = GL_FRAMEBUFFER;
+  GLenum framebuffer_binding = GL_FRAMEBUFFER_BINDING;
+  std::array<int, 4> logged_render_size{};
   int texture_width = 0;
   int texture_height = 0;
   int cpu_texture_width = 0;
@@ -504,6 +529,116 @@ struct OpenGlVideoRenderer::Impl {
   }
 #endif
 
+  // The vertex buffer and program are shared with the final underlay draw.
+  void DrawVideo(GLuint y, GLuint uv, int source_width, int source_height,
+                 int target_width, int target_height, int video_x, int video_y,
+                 int video_width, int video_height, int corner_radius,
+                 bool enabled, bool packed, float filter_x = 0.0f,
+                 float filter_y = 0.0f) {
+    gl.active_texture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, y);
+    gl.active_texture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, uv);
+    gl.uniform_2f(source_size_location, static_cast<GLfloat>(source_width),
+                  static_cast<GLfloat>(source_height));
+    gl.uniform_2f(target_size_location, static_cast<GLfloat>(target_width),
+                  static_cast<GLfloat>(target_height));
+    gl.uniform_4f(video_rect_location, static_cast<GLfloat>(video_x),
+                  static_cast<GLfloat>(video_y), static_cast<GLfloat>(video_width),
+                  static_cast<GLfloat>(video_height));
+    gl.uniform_1f(corner_radius_location, static_cast<GLfloat>(corner_radius));
+    gl.uniform_1f(video_enabled_location, enabled ? 1.0f : 0.0f);
+    gl.uniform_1f(packed_video_location, packed ? 1.0f : 0.0f);
+    gl.uniform_2f(filter_direction_location, filter_x, filter_y);
+    glViewport(0, 0, target_width, target_height);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  }
+
+  bool PrepareScaleTarget(size_t index, int width, int height) {
+    gl.active_texture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, scale_textures[index]);
+    if (scale_sizes[index] != std::pair{width, height}) {
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,
+                   GL_UNSIGNED_BYTE, nullptr);
+      scale_sizes[index] = {width, height};
+    }
+    gl.framebuffer_texture_2d(framebuffer_target, GL_COLOR_ATTACHMENT0,
+                              GL_TEXTURE_2D, scale_textures[index], 0);
+    return gl.check_framebuffer_status(framebuffer_target) ==
+               GL_FRAMEBUFFER_COMPLETE &&
+           glGetError() == GL_NO_ERROR;
+  }
+
+  bool ScaleVideo(GLuint y, GLuint uv, int width, int height, int output_width,
+                  int output_height) {
+    if (!scaling_available) {
+      return false;
+    }
+    if (scaled_sequence == uploaded_sequence &&
+        scale_sizes[1] == std::pair{output_width, output_height}) {
+      return true;
+    }
+
+    GLint previous_framebuffer = 0;
+    glGetIntegerv(framebuffer_binding, &previous_framebuffer);
+    if (scale_framebuffer == 0) {
+      gl.gen_framebuffers(1, &scale_framebuffer);
+      glGenTextures(static_cast<GLsizei>(scale_textures.size()),
+                      scale_textures.data());
+      gl.active_texture(GL_TEXTURE0);
+      for (const GLuint texture : scale_textures) {
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+      }
+    }
+    // A CUDA upload may have left its PBO bound: nullptr below allocates empty
+    // render targets and must never be interpreted as a PBO byte offset.
+    if (pixel_unpack_buffer_available) {
+      gl.bind_buffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    }
+    gl.bind_framebuffer(framebuffer_target, scale_framebuffer);
+    bool success = scale_framebuffer != 0 && scale_textures[0] != 0 &&
+                   scale_textures[1] != 0;
+    bool packed = false;
+    while (success && (width != output_width || height != output_height)) {
+      // Bound shader work without truncating the filter for very small windows.
+      const int next_width = std::max(output_width, (width + 3) / 4);
+      const int next_height = std::max(output_height, (height + 3) / 4);
+      if (!PrepareScaleTarget(0, next_width, height)) {
+        success = false;
+        break;
+      }
+      DrawVideo(y, uv, width, height, next_width, height, 0, 0, next_width,
+                height, 0, true, packed, 1.0f, 0.0f);
+      if (!PrepareScaleTarget(1, next_width, next_height)) {
+        success = false;
+        break;
+      }
+      DrawVideo(scale_textures[0], uv, next_width, height, next_width,
+                next_height, 0, 0, next_width, next_height, 0, true, true,
+                0.0f, 1.0f);
+      success = glGetError() == GL_NO_ERROR;
+      y = scale_textures[1];
+      width = next_width;
+      height = next_height;
+      packed = true;
+    }
+    gl.bind_framebuffer(framebuffer_target,
+                         static_cast<GLuint>(previous_framebuffer));
+    if (!success) {
+      scaling_available = false;
+      while (glGetError() != GL_NO_ERROR) {
+      }
+      LOG_WARN("OpenGL video downsampling unavailable; using linear sampling");
+      return false;
+    }
+    scaled_sequence = uploaded_sequence;
+    return true;
+  }
+
   void ResetGlHandles() {
     program = 0;
     vertex_buffer = 0;
@@ -517,6 +652,15 @@ struct OpenGlVideoRenderer::Impl {
     video_rect_location = -1;
     corner_radius_location = -1;
     video_enabled_location = -1;
+    source_size_location = -1;
+    filter_direction_location = -1;
+    packed_video_location = -1;
+    scale_framebuffer = 0;
+    scale_textures = {};
+    scale_sizes = {};
+    scaled_sequence = 0;
+    scaling_available = false;
+    logged_render_size = {};
     texture_width = 0;
     texture_height = 0;
     cpu_texture_width = 0;
@@ -559,6 +703,10 @@ bool OpenGlVideoRenderer::Setup() {
                     HasOpenGlExtension(extensions, "GL_ARB_pixel_buffer_object")));
   impl_->unpack_subimage_available = !is_gles || major >= 3 ||
       HasOpenGlExtension(extensions, "GL_EXT_unpack_subimage");
+  impl_->scaling_available = impl_->gl.LoadFramebufferFunctions();
+  impl_->framebuffer_target = major >= 3 ? GL_DRAW_FRAMEBUFFER : GL_FRAMEBUFFER;
+  impl_->framebuffer_binding =
+      major >= 3 ? GL_DRAW_FRAMEBUFFER_BINDING : GL_FRAMEBUFFER_BINDING;
 #if CROSSDESK_OPENGL_CUDA_INTEROP
   // GLX may return entry points even if the current GLES 2 context cannot
   // use them. Gate CUDA interop on context capabilities as well as symbols.
@@ -577,8 +725,8 @@ bool OpenGlVideoRenderer::Setup() {
   }
 #endif
 
-  static constexpr char kGlesVertexShader[] = R"glsl(
-#version 100
+  const std::string vertex_source =
+      std::string(is_gles ? "#version 100\n" : "#version 110\n") + R"glsl(
 attribute vec2 position;
 attribute vec2 texcoord;
 varying vec2 video_texcoord;
@@ -587,20 +735,56 @@ void main() {
   gl_Position = vec4(position, 0.0, 1.0);
 }
 )glsl";
-  static constexpr char kGlesFragmentShader[] = R"glsl(
-#version 100
-#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#else
-precision mediump float;
-#endif
+  const std::string fragment_source =
+      std::string(is_gles ? "#version 100\n"
+                           "#ifdef GL_FRAGMENT_PRECISION_HIGH\n"
+                           "precision highp float;\n"
+                           "#else\nprecision mediump float;\n#endif\n"
+                         : "#version 110\n") + R"glsl(
 uniform sampler2D y_texture;
 uniform sampler2D uv_texture;
 uniform vec2 target_size;
+uniform vec2 source_size;
+uniform vec2 filter_direction;
+uniform float packed_video;
 uniform vec4 video_rect;
 uniform float corner_radius;
 uniform float video_enabled;
 varying vec2 video_texcoord;
+// A separable Lanczos-2 low-pass filter. Each pass reduces by at most 4x,
+// so 16 taps cover its complete support even for non-integer scale ratios.
+float lanczos2(float x) {
+  x = abs(x);
+  if (x < 0.0001) return 1.0;
+  if (x >= 2.0) return 0.0;
+  float p = 3.14159265359 * x;
+  return sin(p) * sin(p * 0.5) / (p * p * 0.5);
+}
+vec4 sample_plane(sampler2D plane, vec2 size, vec2 coord) {
+  // FBO textures have the opposite vertical origin to the decoded NV12 planes.
+  if (packed_video > 0.5) coord.y = 1.0 - coord.y;
+  if (filter_direction.x + filter_direction.y < 0.5)
+    return texture2D(plane, coord);
+  float scale = max(1.0, dot(size / video_rect.zw, filter_direction));
+  float center = dot(coord * size - vec2(0.5), filter_direction);
+  float first = floor(center - 2.0 * scale) + 1.0;
+  vec4 sum = vec4(0.0);
+  float weight_sum = 0.0;
+  for (int tap = 0; tap < 16; ++tap) {
+    float offset = first + float(tap) - center;
+    if (offset >= 2.0 * scale) break;
+    float weight = lanczos2(offset / scale);
+    sum += weight * texture2D(plane, coord + filter_direction * offset / size);
+    weight_sum += weight;
+  }
+  return sum / weight_sum;
+}
+vec3 sample_video(vec2 coord) {
+  vec4 y_sample = sample_plane(y_texture, source_size, coord);
+  if (packed_video > 0.5) return y_sample.rgb;
+  return vec3(y_sample.r,
+              sample_plane(uv_texture, source_size * 0.5, coord).ra);
+}
 void main() {
   vec2 surface_point = video_texcoord * target_size;
   vec3 rgb = vec3(0.0);
@@ -611,10 +795,14 @@ void main() {
       surface_point.y <= video_rect.y + video_rect.w) {
     vec2 frame_texcoord =
         (surface_point - video_rect.xy) / video_rect.zw;
-    float y = 1.16438356 *
-              (texture2D(y_texture, frame_texcoord).r - 16.0 / 255.0);
-    vec2 uv =
-        texture2D(uv_texture, frame_texcoord).ra - vec2(0.5, 0.5);
+    vec3 yuv = sample_video(frame_texcoord);
+    if (filter_direction.x + filter_direction.y > 0.5) {
+      // Intermediate RGBA textures carry Y/U/V until the final conversion.
+      gl_FragColor = vec4(yuv, 1.0);
+      return;
+    }
+    float y = 1.16438356 * (yuv.x - 16.0 / 255.0);
+    vec2 uv = yuv.yz - vec2(0.5);
     rgb = clamp(vec3(y + 1.59602678 * uv.y,
                      y - 0.39176229 * uv.x - 0.81296764 * uv.y,
                      y + 2.01723214 * uv.x),
@@ -633,67 +821,11 @@ void main() {
   gl_FragColor = vec4(rgb * coverage, coverage);
 }
 )glsl";
-  static constexpr char kDesktopVertexShader[] = R"glsl(
-#version 110
-attribute vec2 position;
-attribute vec2 texcoord;
-varying vec2 video_texcoord;
-void main() {
-  video_texcoord = texcoord;
-  gl_Position = vec4(position, 0.0, 1.0);
-}
-)glsl";
-  static constexpr char kDesktopFragmentShader[] = R"glsl(
-#version 110
-uniform sampler2D y_texture;
-uniform sampler2D uv_texture;
-uniform vec2 target_size;
-uniform vec4 video_rect;
-uniform float corner_radius;
-uniform float video_enabled;
-varying vec2 video_texcoord;
-void main() {
-  vec2 surface_point = video_texcoord * target_size;
-  vec3 rgb = vec3(0.0);
-  if (video_enabled > 0.5 &&
-      surface_point.x >= video_rect.x &&
-      surface_point.x <= video_rect.x + video_rect.z &&
-      surface_point.y >= video_rect.y &&
-      surface_point.y <= video_rect.y + video_rect.w) {
-    vec2 frame_texcoord =
-        (surface_point - video_rect.xy) / video_rect.zw;
-    float y = 1.16438356 *
-              (texture2D(y_texture, frame_texcoord).r - 16.0 / 255.0);
-    vec2 uv =
-        texture2D(uv_texture, frame_texcoord).ra - vec2(0.5, 0.5);
-    rgb = clamp(vec3(y + 1.59602678 * uv.y,
-                     y - 0.39176229 * uv.x - 0.81296764 * uv.y,
-                     y + 2.01723214 * uv.x),
-                0.0, 1.0);
-  }
-  float coverage = 1.0;
-  if (corner_radius > 0.0) {
-    vec2 half_size = target_size * 0.5;
-    vec2 corner = abs(surface_point - half_size) -
-                  (half_size - vec2(corner_radius));
-    float distance_to_edge =
-        length(max(corner, vec2(0.0))) +
-        min(max(corner.x, corner.y), 0.0) - corner_radius;
-    coverage = clamp(0.5 - distance_to_edge, 0.0, 1.0);
-  }
-  gl_FragColor = vec4(rgb * coverage, coverage);
-}
-)glsl";
-
-  const char *vertex_source =
-      is_gles ? kGlesVertexShader : kDesktopVertexShader;
-  const char *fragment_source =
-      is_gles ? kGlesFragmentShader : kDesktopFragmentShader;
 
   const GLuint vertex_shader =
-      CompileShader(impl_->gl, GL_VERTEX_SHADER, vertex_source);
+      CompileShader(impl_->gl, GL_VERTEX_SHADER, vertex_source.c_str());
   const GLuint fragment_shader =
-      CompileShader(impl_->gl, GL_FRAGMENT_SHADER, fragment_source);
+      CompileShader(impl_->gl, GL_FRAGMENT_SHADER, fragment_source.c_str());
   if (vertex_shader == 0 || fragment_shader == 0) {
     if (vertex_shader != 0)
       impl_->gl.delete_shader(vertex_shader);
@@ -743,11 +875,18 @@ void main() {
       impl_->gl.get_uniform_location(impl_->program, "corner_radius");
   impl_->video_enabled_location =
       impl_->gl.get_uniform_location(impl_->program, "video_enabled");
+  impl_->source_size_location =
+      impl_->gl.get_uniform_location(impl_->program, "source_size");
+  impl_->filter_direction_location =
+      impl_->gl.get_uniform_location(impl_->program, "filter_direction");
+  impl_->packed_video_location =
+      impl_->gl.get_uniform_location(impl_->program, "packed_video");
   if (impl_->position_location < 0 || impl_->texcoord_location < 0 ||
       impl_->y_texture_location < 0 || impl_->uv_texture_location < 0 ||
       impl_->target_size_location < 0 || impl_->video_rect_location < 0 ||
       impl_->corner_radius_location < 0 ||
-      impl_->video_enabled_location < 0) {
+      impl_->video_enabled_location < 0 || impl_->source_size_location < 0 ||
+      impl_->filter_direction_location < 0 || impl_->packed_video_location < 0) {
     LOG_ERROR("OpenGL NV12 program is missing required shader bindings");
     impl_->gl.delete_program(impl_->program);
     impl_->ResetGlHandles();
@@ -817,6 +956,11 @@ void main() {
 
 void OpenGlVideoRenderer::Teardown() {
   impl_->ready.store(false, std::memory_order_release);
+  if (impl_->scale_framebuffer != 0) {
+    impl_->gl.delete_framebuffers(1, &impl_->scale_framebuffer);
+  }
+  glDeleteTextures(static_cast<GLsizei>(impl_->scale_textures.size()),
+                    impl_->scale_textures.data());
 #if CROSSDESK_OPENGL_CUDA_INTEROP
   impl_->ReleaseCudaInterop();
 #endif
@@ -1356,24 +1500,8 @@ OpenGlVideoRenderer::RenderLatest(std::string_view remote_id,
   }
 #endif
   impl_->gl.use_program(impl_->program);
-  impl_->gl.active_texture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, displayed_y_texture);
   impl_->gl.uniform_1i(impl_->y_texture_location, 0);
-  impl_->gl.active_texture(GL_TEXTURE1);
-  glBindTexture(GL_TEXTURE_2D, displayed_uv_texture);
   impl_->gl.uniform_1i(impl_->uv_texture_location, 1);
-  impl_->gl.uniform_2f(impl_->target_size_location,
-                       static_cast<GLfloat>(target_width),
-                       static_cast<GLfloat>(target_height));
-  impl_->gl.uniform_4f(
-      impl_->video_rect_location, static_cast<GLfloat>(video_x),
-      static_cast<GLfloat>(video_y), static_cast<GLfloat>(video_width),
-      static_cast<GLfloat>(video_height));
-  impl_->gl.uniform_1f(
-      impl_->corner_radius_location,
-      static_cast<GLfloat>(std::clamp(
-          corner_radius_pixels, 0, std::min(target_width, target_height) / 2)));
-  impl_->gl.uniform_1f(impl_->video_enabled_location, has_video ? 1.0f : 0.0f);
   impl_->gl.bind_buffer(GL_ARRAY_BUFFER, impl_->vertex_buffer);
   impl_->gl.vertex_attrib_pointer(
       static_cast<GLuint>(impl_->position_location), 2, GL_FLOAT, GL_FALSE,
@@ -1386,7 +1514,25 @@ OpenGlVideoRenderer::RenderLatest(std::string_view remote_id,
       static_cast<GLuint>(impl_->position_location));
   impl_->gl.enable_vertex_attrib_array(
       static_cast<GLuint>(impl_->texcoord_location));
-  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  const bool downscaled = has_video &&
+      (source_width > video_width || source_height > video_height) &&
+      impl_->ScaleVideo(displayed_y_texture, displayed_uv_texture, source_width,
+                        source_height, video_width, video_height);
+  impl_->DrawVideo(
+      downscaled ? impl_->scale_textures[1] : displayed_y_texture,
+      displayed_uv_texture, downscaled ? video_width : source_width,
+      downscaled ? video_height : source_height, target_width, target_height,
+      video_x, video_y, video_width, video_height,
+      std::clamp(corner_radius_pixels, 0, std::min(target_width, target_height) / 2),
+      has_video, downscaled);
+  const std::array<int, 4> render_size{
+      source_width, source_height, video_width, video_height};
+  if (has_video && impl_->logged_render_size != render_size) {
+    LOG_INFO("OpenGL video presentation: source={}x{}, display={}x{} physical "
+             "pixels, filter={}", source_width, source_height, video_width,
+             video_height, downscaled ? "Lanczos2" : "linear");
+    impl_->logged_render_size = render_size;
+  }
 #if CROSSDESK_OPENGL_CUDA_INTEROP
   if (impl_->displayed_cuda_upload_slot < impl_->cuda_upload_slots.size()) {
     auto &cuda_slot =
