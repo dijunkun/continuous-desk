@@ -25,6 +25,9 @@ export struct NetworkStatsRow {
 export global StreamStrings {
     in-out property <string> select-display: "Select Display";
     in-out property <string> send-shortcut: "Send Shortcut";
+    in-out property <string> privacy-enable: "Enable privacy screen";
+    in-out property <string> privacy-disable: "Turn privacy off / recover";
+    in-out property <string> privacy-block-input: "Block local input on enable";
     in-out property <string> control-mouse: "Control Mouse";
     in-out property <string> release-mouse: "Release Mouse";
     in-out property <string> audio: "Audio Capture";
@@ -134,6 +137,12 @@ export component StreamWindow inherits Window {
     in property <[string]> displays;
     in-out property <int> selected-display: 0;
     in property <bool> mouse-control-enabled: true;
+    in property <bool> privacy-can-toggle: false;
+    in property <bool> privacy-active: false;
+    in property <bool> privacy-block-input: true;
+    in property <bool> privacy-can-change-input: false;
+    in property <bool> privacy-remote-paused: false;
+    in property <string> privacy-status-text: "Privacy screen: waiting for host";
     // Numeric values mirror crossdesk::RemoteCursorShape and Slint's MouseCursor.
     in property <bool> remote-cursor-active: false;
     in property <int> remote-cursor-shape: 0;
@@ -154,6 +163,8 @@ export component StreamWindow inherits Window {
     callback switch-display(int);
     callback send-shortcut(string);
     callback toggle-mouse-control;
+    callback toggle-privacy;
+    callback toggle-privacy-input;
     callback toggle-audio;
     callback select-file;
     callback close-file-transfer;
@@ -232,9 +243,9 @@ export component StreamWindow inherits Window {
         let shortcut-menu-y = control.y + 40px;
         let over-shortcut-menu = root.shortcut-menu-open
             && pointer-x >= shortcut-menu-x
-            && pointer-x <= shortcut-menu-x + 150px
+            && pointer-x <= shortcut-menu-x + 360px
             && pointer-y >= shortcut-menu-y
-            && pointer-y <= shortcut-menu-y + 68px;
+            && pointer-y <= shortcut-menu-y + 200px;
         return over-control || over-display-menu || over-shortcut-menu;
     }
 
@@ -943,7 +954,7 @@ export component StreamWindow inherits Window {
             }
 
             if root.shortcut-menu-open: Rectangle {
-                x: control.x + (root.control-docked-left ? 41px : 74px); y: control.y + 40px; width: 150px; height: 68px;
+                x: control.x + (root.control-docked-left ? 41px : 74px); y: control.y + 40px; width: 360px; height: 200px;
                 background: white; border-width: 1px; border-color: ImGuiLineStyle.border; border-radius: 5px; z: 11;
                 VerticalLayout {
                     padding: 4px; spacing: 1px;
@@ -959,7 +970,32 @@ export component StreamWindow inherits Window {
                             clicked => { root.send-shortcut(shortcut); root.shortcut-menu-open = false; }
                         }
                     }
+                    Rectangle {
+                        height: 29px; background: privacy-touch.has-hover ? #e8eef9 : transparent;
+                        Text { x: 8px; text: root.privacy-active ? StreamStrings.privacy-disable : StreamStrings.privacy-enable; color: root.privacy-can-toggle ? #30343b : #8a8f96; font-size: ImGuiFontStyle.body; vertical-alignment: center; }
+                        privacy-touch := TouchArea {
+                            enabled: root.privacy-can-toggle;
+                            pointer-event(event) => { if event.kind == PointerEventKind.down { root.suppress-next-remote-pointer-release = true; } }
+                            clicked => { root.toggle-privacy(); }
+                        }
+                    }
+                    Rectangle {
+                        height: 29px; background: privacy-input-touch.has-hover ? #e8eef9 : transparent;
+                        Text { x: 8px; text: (root.privacy-block-input ? "[✓] " : "[ ] ") + StreamStrings.privacy-block-input; color: root.privacy-can-change-input ? #30343b : #8a8f96; font-size: ImGuiFontStyle.body; vertical-alignment: center; }
+                        privacy-input-touch := TouchArea {
+                            enabled: root.privacy-can-change-input;
+                            pointer-event(event) => { if event.kind == PointerEventKind.down { root.suppress-next-remote-pointer-release = true; } }
+                            clicked => { root.toggle-privacy-input(); }
+                        }
+                    }
+                    Text { height: 68px; text: root.privacy-status-text; wrap: word-wrap; color: #555b66; font-size: ImGuiFontStyle.body; }
                 }
+            }
+
+            if root.privacy-remote-paused: Rectangle {
+                x: 0px; y: 65px; width: parent.width; height: parent.height - 65px;
+                background: #16181d; z: 6;
+                Text { x: 30px; width: parent.width - 60px; text: root.privacy-status-text; color: #eeeeee; wrap: word-wrap; horizontal-alignment: center; vertical-alignment: center; }
             }
 
             // Transfer progress overlay at bottom-left.

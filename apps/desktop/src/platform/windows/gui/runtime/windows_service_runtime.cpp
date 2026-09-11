@@ -114,6 +114,10 @@ void GuiRuntime::HandleWindowsServiceIntegration() {
 
   bool force_broadcast = false;
   if (pending_windows_service_sas_.exchange(false, std::memory_order_relaxed)) {
+    if (privacy_.Engaged()) {
+      privacy_.Fail("Queued security shortcut cancelled during privacy mode; remote operation paused");
+      return;
+    }
     const std::string response =
         QueryCrossDeskService("sas", kWindowsServiceSasTimeoutMs);
     auto json = nlohmann::json::parse(response, nullptr, false);

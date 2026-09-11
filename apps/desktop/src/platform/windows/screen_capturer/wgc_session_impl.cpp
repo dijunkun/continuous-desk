@@ -339,6 +339,7 @@ void WgcSessionImpl::OnClosed(
     winrt::Windows::Graphics::Capture::GraphicsCaptureItem const&,
     winrt::Windows::Foundation::IInspectable const&) {
   std::lock_guard locker(lock_);
+  if (observer_) observer_->OnFrame({}, id_);
   const bool was_running = is_running_;
   const bool was_paused = is_paused_;
   try {

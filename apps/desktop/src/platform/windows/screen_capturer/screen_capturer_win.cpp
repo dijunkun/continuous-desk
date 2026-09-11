@@ -127,6 +127,13 @@ class WgcPluginCapturer final : public ScreenCapturer {
   DestroyFn destroy_fn_ = nullptr;
 };
 
+const char* CaptureBackendName(const ScreenCapturer* capturer) {
+  if (dynamic_cast<const ScreenCapturerDxgi*>(capturer)) return "DXGI";
+  if (dynamic_cast<const WgcPluginCapturer*>(capturer)) return "WGC";
+  if (dynamic_cast<const ScreenCapturerGdi*>(capturer)) return "GDI";
+  return "unavailable";
+}
+
 std::string BuildSecureCaptureCommand(int left, int top, int width, int height,
                                       bool show_cursor,
                                       const std::string& stage,
@@ -330,7 +337,13 @@ bool QuerySecureDesktopHelperFrame(
 ScreenCapturerWin::ScreenCapturerWin() {}
 ScreenCapturerWin::~ScreenCapturerWin() { Destroy(); }
 
+void ScreenCapturerWin::NotifyPrivacyCapture(bool running) {
+  if (privacy_)
+    privacy_->CaptureChanged(CaptureBackendName(impl_.get()), running);
+}
+
 int ScreenCapturerWin::Init(const int fps, cb_desktop_data cb) {
+  NotifyPrivacyCapture(false);
   fps_ = fps;
   cb_orig_ = cb;
   native_output_logged_.store(false, std::memory_order_relaxed);
@@ -344,12 +357,17 @@ int ScreenCapturerWin::Init(const int fps, cb_desktop_data cb) {
   cb_ = [this](unsigned char* data, int size, int w, int h,
                const char* reported_stream_id,
                const MiniRtcNativeVideoFrame* native_frame) {
+    if (size == ScreenCapturer::kBackendReset) {
+      if (privacy_) privacy_->CaptureInterrupted();
+      return;
+    }
     if (secure_desktop_capture_active_.load(std::memory_order_relaxed)) {
       return;
     }
 
     const char* raw_stream_id = reported_stream_id ? reported_stream_id : "";
     std::string mapped_stream_id;
+    DisplayInfo privacy_display{"", 0, 0, 0, 0};
     {
       std::lock_guard<std::mutex> lock(alias_mutex_);
       auto it = stream_id_alias_.find(raw_stream_id);
@@ -363,6 +381,21 @@ int ScreenCapturerWin::Init(const int fps, cb_desktop_data cb) {
       mapped_stream_id = ResolveDisplayStreamId(
           mapped_stream_id.c_str(), canonical_displays_.size(),
           monitor_index_.load(std::memory_order_relaxed));
+      for (size_t index = 0; index < canonical_displays_.size(); ++index) {
+        if (mapped_stream_id == MakeDisplayStreamId(index)) {
+          privacy_display = canonical_displays_[index];
+          break;
+        }
+      }
+    }
+    if (privacy_) {
+      if (privacy_->Engaged() && !IsWindowsPrivacyDesktopAvailable()) {
+        privacy_->Fail("Secure or unavailable desktop; privacy cannot cover system security UI. Remote operation paused.");
+        return;
+      }
+      if (!privacy_->ObserveFrame(data, size > 0 ? static_cast<size_t>(size) : 0,
+              w, h, privacy_display.left, privacy_display.top,
+              privacy_display.width, privacy_display.height)) return;
     }
     if (mapped_stream_id.empty()) {
       if (!invalid_stream_id_logged_.exchange(true,
@@ -393,42 +426,23 @@ int ScreenCapturerWin::Init(const int fps, cb_desktop_data cb) {
                       native_frame);
   };
 
+  impl_.reset();
   int ret = -1;
-
-  impl_ = WgcPluginCapturer::Create();
-  impl_is_wgc_plugin_ = (impl_ != nullptr);
-  ret = impl_ ? impl_->Init(fps_, cb_) : -1;
-  if (ret == 0) {
-    LOG_INFO("Windows capturer: using WGC plugin");
-    BuildCanonicalFromImpl();
-    monitor_index_.store(0, std::memory_order_relaxed);
-    initial_monitor_index_ = 0;
-    return 0;
-  }
-
-  LOG_WARN("Windows capturer: WGC plugin init failed (ret={}), try DXGI", ret);
-  impl_.reset();
-  impl_is_wgc_plugin_ = false;
-
-  impl_ = std::make_unique<ScreenCapturerDxgi>();
-  impl_is_wgc_plugin_ = false;
-  ret = impl_->Init(fps_, cb_);
-  if (ret == 0) {
-    LOG_INFO("Windows capturer: using DXGI Desktop Duplication");
-    BuildCanonicalFromImpl();
-    monitor_index_.store(0, std::memory_order_relaxed);
-    initial_monitor_index_ = 0;
-    return 0;
-  }
-
-  LOG_WARN("Windows capturer: DXGI init failed (ret={}), fallback to GDI", ret);
-  impl_.reset();
-
-  impl_ = std::make_unique<ScreenCapturerGdi>();
-  impl_is_wgc_plugin_ = false;
-  ret = impl_->Init(fps_, cb_);
-  if (ret == 0) {
-    LOG_INFO("Windows capturer: using GDI BitBlt");
+  auto try_init = [&](std::unique_ptr<ScreenCapturer> candidate) {
+    ret = candidate ? candidate->Init(fps_, cb_) : -1;
+    if (ret != 0) {
+      LOG_WARN("Windows capturer: {} init failed (ret={})",
+               CaptureBackendName(candidate.get()), ret);
+      return false;
+    }
+    impl_ = std::move(candidate);
+    return true;
+  };
+  // Short-circuiting also keeps the unused WGC plugin unloaded.
+  if (try_init(std::make_unique<ScreenCapturerDxgi>()) ||
+      try_init(WgcPluginCapturer::Create()) ||
+      try_init(std::make_unique<ScreenCapturerGdi>())) {
+    LOG_INFO("Windows capturer: using {}", CaptureBackendName(impl_.get()));
     BuildCanonicalFromImpl();
     monitor_index_.store(0, std::memory_order_relaxed);
     initial_monitor_index_ = 0;
@@ -436,7 +450,6 @@ int ScreenCapturerWin::Init(const int fps, cb_desktop_data cb) {
   }
 
   LOG_ERROR("Windows capturer: all implementations failed, ret={}", ret);
-  impl_.reset();
   return -1;
 }
 
@@ -446,7 +459,6 @@ int ScreenCapturerWin::Destroy() {
   if (impl_) {
     impl_->Destroy();
     impl_.reset();
-    impl_is_wgc_plugin_ = false;
   }
   {
     std::lock_guard<std::mutex> lock(alias_mutex_);
@@ -459,8 +471,15 @@ int ScreenCapturerWin::Destroy() {
 
 void ScreenCapturerWin::EmitCapturedFrame(
     unsigned char* data, int size, int width, int height,
-    const char* stream_id, const MiniRtcNativeVideoFrame* native_frame) {
-  if (!cb_orig_) {
+    const char* stream_id, const MiniRtcNativeVideoFrame* native_frame,
+    bool from_secure_desktop) {
+  // A helper IPC already in flight when enable began must not bypass the
+  // verified ordinary-desktop callback when it completes later.
+  if (from_secure_desktop && privacy_ && privacy_->Engaged()) {
+    privacy_->Fail("Secure desktop helper frame arrived during privacy; remote operation paused");
+    return;
+  }
+  if (!cb_orig_ || (privacy_ && !privacy_->RemoteAllowed())) {
     return;
   }
 
@@ -499,11 +518,43 @@ void ScreenCapturerWin::EmitCapturedFrame(
   owned_frame->Release();
 }
 
+void ScreenCapturerWin::RestoreMonitor(int monitor_index) {
+  RebuildAliasesFromImpl();
+  if (monitor_index > 0 && impl_->SwitchTo(monitor_index) != 0) {
+    monitor_index_.store(0, std::memory_order_relaxed);
+  }
+}
+
+bool ScreenCapturerWin::TryStartBackend(
+    std::unique_ptr<ScreenCapturer> candidate, int monitor_index) {
+  if (!candidate) {
+    LOG_WARN("Windows capturer: WGC plugin unavailable");
+    return false;
+  }
+  const char* name = CaptureBackendName(candidate.get());
+  int ret = candidate->Init(fps_, cb_);
+  if (ret == 0)
+    ret = candidate->Start(show_cursor_.load(std::memory_order_relaxed));
+  if (ret != 0) {
+    LOG_WARN("Windows capturer: {} initialization/start failed (ret={})", name,
+             ret);
+    candidate->Destroy();
+    return false;
+  }
+  // Commit only after the replacement is running. Failed candidates release
+  // their resources without replacing the current backend.
+  impl_ = std::move(candidate);
+  RestoreMonitor(monitor_index);
+  LOG_INFO("Windows capturer: started {}", name);
+  return true;
+}
+
 int ScreenCapturerWin::Start(bool show_cursor) {
   if (!impl_) return -1;
   if (running_.load(std::memory_order_relaxed)) {
     return 0;
   }
+  NotifyPrivacyCapture(false);
 
   show_cursor_.store(show_cursor, std::memory_order_relaxed);
   paused_.store(false, std::memory_order_relaxed);
@@ -528,37 +579,15 @@ int ScreenCapturerWin::Start(bool show_cursor) {
     LOG_WARN("Windows capturer: refresh/start failed (ret={}), trying fallback",
              ret);
 
-    auto try_init_start = [&](std::unique_ptr<ScreenCapturer> cand) -> bool {
-      int r = cand->Init(fps_, cb_);
-      if (r != 0) return false;
-      int s = cand->Start(show_cursor);
-      if (s == 0) {
-        impl_ = std::move(cand);
-        impl_is_wgc_plugin_ = false;
-        RebuildAliasesFromImpl();
-        if (requested_monitor > 0 &&
-            impl_->SwitchTo(requested_monitor) != 0) {
-          monitor_index_.store(0, std::memory_order_relaxed);
-        }
-        return true;
-      }
-      return false;
-    };
-
     bool fallback_started = false;
-    if (impl_is_wgc_plugin_) {
-      if (try_init_start(std::make_unique<ScreenCapturerDxgi>())) {
-        LOG_INFO("Windows capturer: fallback to DXGI");
-        fallback_started = true;
-      } else if (try_init_start(std::make_unique<ScreenCapturerGdi>())) {
-        LOG_INFO("Windows capturer: fallback to GDI");
-        fallback_started = true;
-      }
-    } else if (dynamic_cast<ScreenCapturerDxgi*>(impl_.get())) {
-      if (try_init_start(std::make_unique<ScreenCapturerGdi>())) {
-        LOG_INFO("Windows capturer: fallback to GDI");
-        fallback_started = true;
-      }
+    if (dynamic_cast<ScreenCapturerDxgi*>(impl_.get()) &&
+        TryStartBackend(WgcPluginCapturer::Create(), requested_monitor)) {
+      fallback_started = true;
+    }
+    if (!fallback_started && (dynamic_cast<WgcPluginCapturer*>(impl_.get()) ||
+                              dynamic_cast<ScreenCapturerDxgi*>(impl_.get()))) {
+      fallback_started = TryStartBackend(std::make_unique<ScreenCapturerGdi>(),
+                                         requested_monitor);
     }
 
     if (!fallback_started) {
@@ -568,6 +597,7 @@ int ScreenCapturerWin::Start(bool show_cursor) {
   }
 
   running_.store(true, std::memory_order_relaxed);
+  NotifyPrivacyCapture(true);
   secure_desktop_capture_active_.store(false, std::memory_order_relaxed);
   post_secure_desktop_waiting_for_frame_.store(false,
                                                std::memory_order_relaxed);
@@ -581,6 +611,7 @@ int ScreenCapturerWin::Start(bool show_cursor) {
 }
 
 int ScreenCapturerWin::Stop() {
+  NotifyPrivacyCapture(false);
   running_.store(false, std::memory_order_relaxed);
   secure_desktop_capture_active_.store(false, std::memory_order_relaxed);
   post_secure_desktop_waiting_for_frame_.store(false,
@@ -610,9 +641,12 @@ int ScreenCapturerWin::Resume(int monitor_index) {
 
 int ScreenCapturerWin::SwitchTo(int monitor_index) {
   if (!impl_) return -1;
+  if (privacy_) privacy_->DisplayChanging();
   const int ret = impl_->SwitchTo(monitor_index);
   if (ret == 0) {
     monitor_index_.store(monitor_index, std::memory_order_relaxed);
+  } else if (privacy_) {
+    privacy_->Fail("Display switch failed; remote operation paused");
   }
   return ret;
 }
@@ -735,53 +769,19 @@ void ScreenCapturerWin::StopSecureCaptureThread() {
 }
 
 bool ScreenCapturerWin::RestartCaptureBackendAfterSecureDesktop() {
+  NotifyPrivacyCapture(false);
   if (!impl_ || !running_.load(std::memory_order_relaxed)) {
     return false;
   }
 
   const bool show_cursor = show_cursor_.load(std::memory_order_relaxed);
   const int current_monitor = monitor_index_.load(std::memory_order_relaxed);
-  auto restore_monitor = [&]() {
-    RebuildAliasesFromImpl();
-    if (current_monitor > 0 && impl_->SwitchTo(current_monitor) != 0) {
-      monitor_index_.store(0, std::memory_order_relaxed);
-    }
-  };
-  auto try_started_backend = [&](std::unique_ptr<ScreenCapturer> cand,
-                                 const char* name,
-                                 bool is_wgc_plugin) -> bool {
-    if (!cand) {
-      return false;
-    }
-    const int init_ret = cand->Init(fps_, cb_);
-    if (init_ret != 0) {
-      LOG_WARN("Windows capturer: {} init after secure desktop failed (ret={})",
-               name, init_ret);
-      return false;
-    }
-    const int start_ret = cand->Start(show_cursor);
-    if (start_ret != 0) {
-      LOG_WARN(
-          "Windows capturer: {} start after secure desktop failed (ret={})",
-          name, start_ret);
-      cand->Destroy();
-      return false;
-    }
-    if (impl_) {
-      impl_->Destroy();
-    }
-    impl_ = std::move(cand);
-    impl_is_wgc_plugin_ = is_wgc_plugin;
-    restore_monitor();
-    LOG_INFO("Windows capturer: restarted {} after secure desktop", name);
-    return true;
-  };
 
   LOG_INFO("Windows capturer: restarting capture backend after secure desktop");
   impl_->Stop();
   int ret = impl_->Start(show_cursor);
   if (ret == 0) {
-    restore_monitor();
+    RestoreMonitor(current_monitor);
     return true;
   }
 
@@ -795,20 +795,14 @@ bool ScreenCapturerWin::RestartCaptureBackendAfterSecureDesktop() {
     ret = impl_->Start(show_cursor);
   }
   if (ret == 0) {
-    restore_monitor();
+    RestoreMonitor(current_monitor);
     return true;
   }
 
-  if (impl_is_wgc_plugin_ &&
-      try_started_backend(WgcPluginCapturer::Create(), "WGC plugin", true)) {
-    return true;
-  }
-  if (try_started_backend(std::make_unique<ScreenCapturerDxgi>(), "DXGI",
-                          false)) {
-    return true;
-  }
-  if (try_started_backend(std::make_unique<ScreenCapturerGdi>(), "GDI",
-                          false)) {
+  if (TryStartBackend(std::make_unique<ScreenCapturerDxgi>(),
+                      current_monitor) ||
+      TryStartBackend(WgcPluginCapturer::Create(), current_monitor) ||
+      TryStartBackend(std::make_unique<ScreenCapturerGdi>(), current_monitor)) {
     return true;
   }
 
@@ -1123,6 +1117,14 @@ void ScreenCapturerWin::SecureDesktopCaptureLoop() {
   std::vector<uint8_t> secure_frame;
 
   while (running_.load(std::memory_order_relaxed)) {
+    // A privacy session must NEVER continue using the helper's secure-desktop
+    // GDI frames. Its HWNDs belong to the ordinary interactive desktop only.
+    if (privacy_ && privacy_->Engaged()) {
+      if (!IsWindowsPrivacyDesktopAvailable())
+        privacy_->Fail("Secure desktop or lock screen; remote operation paused. Privacy cannot cover Windows security UI.");
+      std::this_thread::sleep_for(std::chrono::milliseconds(25));
+      continue;
+    }
     if (paused_.load(std::memory_order_relaxed)) {
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
       continue;
@@ -1295,7 +1297,7 @@ void ScreenCapturerWin::SecureDesktopCaptureLoop() {
     if (frame_delivered && !secure_frame.empty()) {
       EmitCapturedFrame(secure_frame.data(),
                         static_cast<int>(secure_frame.size()), captured_width,
-                        captured_height, display_name.c_str());
+                        captured_height, display_name.c_str(), nullptr, true);
     }
 
     if (!frame_delivered && !frame_pending) {

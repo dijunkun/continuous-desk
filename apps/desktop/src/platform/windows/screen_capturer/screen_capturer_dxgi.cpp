@@ -1,11 +1,12 @@
 #include "screen_capturer_dxgi.h"
 
+#include <display_stream_id.h>
+
 #include <algorithm>
 #include <chrono>
 #include <string>
 #include <vector>
 
-#include <display_stream_id.h>
 #include "libyuv.h"
 #include "rd_log.h"
 
@@ -218,11 +219,13 @@ void ScreenCapturerDxgi::EnumerateDisplays() {
                          mi.rcMonitor.left, mi.rcMonitor.top,
                          mi.rcMonitor.right, mi.rcMonitor.bottom);
         // primary first
-        if (is_primary)
+        if (is_primary) {
           display_info_list_.insert(display_info_list_.begin(), info);
-        else
+          outputs_.insert(outputs_.begin(), output);
+        } else {
           display_info_list_.push_back(info);
-        outputs_.push_back(output);
+          outputs_.push_back(output);
+        }
       }
     }
   }
@@ -246,6 +249,11 @@ bool ScreenCapturerDxgi::CreateDuplicationForMonitor(int monitor_index) {
   }
 
   staging_.Reset();
+  DXGI_OUTDUPL_DESC desc{};
+  duplication_->GetDesc(&desc);
+  rotation_ = desc.Rotation;
+  LOG_INFO("DXGI: duplication ready, monitor={}, rotation={}", monitor_index,
+           static_cast<int>(rotation_));
   return true;
 }
 
@@ -276,6 +284,7 @@ bool ScreenCapturerDxgi::RecreateDuplicationForCurrentMonitor() {
 }
 
 void ScreenCapturerDxgi::ReleaseDuplication() {
+  ++duplication_generation_;
   staging_.Reset();
   if (duplication_) {
     duplication_->ReleaseFrame();
@@ -284,16 +293,27 @@ void ScreenCapturerDxgi::ReleaseDuplication() {
 }
 
 void ScreenCapturerDxgi::CaptureLoop() {
-  const int timeout_ms = 33;
+  const int timeout_ms = (std::max)(1, 1000 / (std::max)(1, fps_));
+  bool cached_frame_valid = false;
+  int cached_monitor = -1;
+  uint64_t cached_generation = 0;
+  std::vector<uint8_t> rotated_frame;
   auto last_duplication_retry =
       std::chrono::steady_clock::now() - std::chrono::milliseconds(1000);
   while (running_) {
     if (paused_) {
+      cached_frame_valid = false;
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
       continue;
     }
 
+    // Duplication/staging textures belong to one monitor. Do not release or
+    // replace them in SwitchTo while AcquireNextFrame/Map is using them.
+    std::unique_lock capture_lock(switch_mutex_);
+    if (paused_ || !running_) continue;
     if (!duplication_) {
+      cached_frame_valid = false;
+      capture_lock.unlock();
       const auto now = std::chrono::steady_clock::now();
       if (now - last_duplication_retry >= std::chrono::milliseconds(500)) {
         last_duplication_retry = now;
@@ -303,15 +323,32 @@ void ScreenCapturerDxgi::CaptureLoop() {
       continue;
     }
 
+    const int frame_monitor = monitor_index_.load();
     DXGI_OUTDUPL_FRAME_INFO frame_info{};
     Microsoft::WRL::ComPtr<IDXGIResource> desktop_resource;
     HRESULT hr = duplication_->AcquireNextFrame(
         timeout_ms, &frame_info, desktop_resource.GetAddressOf());
     if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
+      // DXGI explicitly reports an unchanged desktop. Re-emit only a frame
+      // successfully acquired for this monitor, so a static screen still has
+      // a delivery heartbeat after temporary privacy probes are removed.
+      if (cached_frame_valid && cached_generation == duplication_generation_ &&
+          cached_monitor == monitor_index_.load() && callback_ && nv12_frame_) {
+        const auto stream_id = MakeDisplayStreamId(cached_monitor);
+        capture_lock.unlock();
+        callback_(nv12_frame_, nv12_width_ * nv12_height_ * 3 / 2, nv12_width_,
+                  nv12_height_, stream_id.c_str(), nullptr);
+      }
       continue;
     }
+    // Never replay a cached image after an acquisition/conversion failure or
+    // a backend rebuild. Normal error/reset handling must pause privacy.
+    cached_frame_valid = false;
     if (FAILED(hr)) {
       LOG_ERROR("DXGI: AcquireNextFrame failed, hr={}", (int)hr);
+      capture_lock.unlock();
+      if (callback_)
+        callback_(nullptr, ScreenCapturer::kBackendReset, 0, 0, "", nullptr);
       RecreateDuplicationForCurrentMonitor();
       continue;
     }
@@ -356,9 +393,42 @@ void ScreenCapturerDxgi::CaptureLoop() {
       continue;
     }
 
+    auto pixels = static_cast<const uint8_t*>(mapped.pData);
+    int stride = static_cast<int>(mapped.RowPitch);
     int logical_width = static_cast<int>(src_desc.Width);
+    int logical_height = static_cast<int>(src_desc.Height);
+    libyuv::RotationMode rotation = libyuv::kRotate0;
+    switch (rotation_) {
+      case DXGI_MODE_ROTATION_ROTATE90:
+        rotation = libyuv::kRotate90;
+        break;
+      case DXGI_MODE_ROTATION_ROTATE180:
+        rotation = libyuv::kRotate180;
+        break;
+      case DXGI_MODE_ROTATION_ROTATE270:
+        rotation = libyuv::kRotate270;
+        break;
+      default:
+        break;
+    }
+    if (rotation != libyuv::kRotate0) {
+      const bool swap_axes = rotation != libyuv::kRotate180;
+      const int rotated_width = swap_axes ? logical_height : logical_width;
+      rotated_frame.resize(static_cast<size_t>(logical_width) * logical_height *
+                           4);
+      if (libyuv::ARGBRotate(pixels, stride, rotated_frame.data(),
+                             rotated_width * 4, logical_width, logical_height,
+                             rotation) != 0) {
+        d3d_context_->Unmap(staging_.Get(), 0);
+        duplication_->ReleaseFrame();
+        continue;
+      }
+      pixels = rotated_frame.data();
+      stride = rotated_width * 4;
+      if (swap_axes) std::swap(logical_width, logical_height);
+    }
     int even_width = logical_width & ~1;
-    int even_height = static_cast<int>(src_desc.Height) & ~1;
+    int even_height = logical_height & ~1;
     if (even_width <= 0 || even_height <= 0) {
       d3d_context_->Unmap(staging_.Get(), 0);
       duplication_->ReleaseFrame();
@@ -374,25 +444,29 @@ void ScreenCapturerDxgi::CaptureLoop() {
       nv12_height_ = even_height;
     }
 
-    libyuv::ARGBToNV12(static_cast<const uint8_t*>(mapped.pData),
-                       static_cast<int>(mapped.RowPitch), nv12_frame_,
-                       even_width, nv12_frame_ + even_width * even_height,
-                       even_width, even_width, even_height);
+    const int converted =
+        libyuv::ARGBToNV12(pixels, stride, nv12_frame_, even_width,
+                           nv12_frame_ + even_width * even_height, even_width,
+                           even_width, even_height);
 
-    if (callback_) {
-      int idx = monitor_index_.load();
+    cached_generation = duplication_generation_;
+    d3d_context_->Unmap(staging_.Get(), 0);
+    duplication_->ReleaseFrame();
+    capture_lock.unlock();
+
+    if (converted == 0 && frame_monitor == monitor_index_.load() && callback_) {
+      int idx = frame_monitor;
       if (idx >= 0 && idx < static_cast<int>(display_info_list_.size())) {
         const std::string stream_id = MakeDisplayStreamId(idx);
         callback_(nv12_frame_, nv12_size, even_width, even_height,
                   stream_id.c_str(), nullptr);
+        cached_monitor = idx;
+        cached_frame_valid = true;
       } else {
         LOG_ERROR("DXGI: CaptureLoop invalid monitor_index {} (list size {})",
                   idx, display_info_list_.size());
       }
     }
-
-    d3d_context_->Unmap(staging_.Get(), 0);
-    duplication_->ReleaseFrame();
   }
 }
 

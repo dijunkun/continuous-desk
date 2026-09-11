@@ -212,8 +212,13 @@ int KeyboardController::SendKeyCommand(int key_code, bool is_down,
 
 bool KeyboardController::InjectRemoteKey(int key_code, bool is_down,
                                          uint32_t scan_code, bool extended) {
+  if (is_down && !owner_.privacy_.RemoteAllowed()) return false;
 #if _WIN32
-  if (owner_.local_service_status_received_ &&
+  if (owner_.privacy_.Engaged() && !IsWindowsPrivacyDesktopAvailable()) {
+    owner_.privacy_.Fail("Secure desktop or locked session; remote key injection paused");
+    return false;
+  }
+  if (!owner_.privacy_.Engaged() && owner_.local_service_status_received_ &&
       IsSecureDesktopInteractionRequired(owner_.local_interactive_stage_)) {
     const std::string response = SendCrossDeskSecureDesktopKeyInput(
         key_code, is_down, scan_code, extended, 1000);
@@ -246,6 +251,8 @@ bool KeyboardController::InjectRemoteKey(int key_code, bool is_down,
     return true;
   }
 #endif
+  // Recheck after the desktop query; key-up cleanup remains allowed while paused.
+  if (is_down && !owner_.privacy_.RemoteAllowed()) return false;
   return owner_.devices_.SendKeyboardCommand(key_code, is_down, scan_code,
                                              extended);
 }
@@ -342,11 +349,50 @@ void KeyboardController::ReleaseRemotePressedKeys(const std::string& remote_id,
              keys_to_release.size(), remote_id, reason ? reason : "unknown");
   }
   for (const PressedKey& key : keys_to_release) {
-    InjectRemoteKey(key.key_code, false, key.scan_code, key.extended);
+    if (!InjectRemoteKey(key.key_code, false, key.scan_code, key.extended)) {
+#ifdef _WIN32
+      if (owner_.privacy_.Engaged()) {
+        std::lock_guard lock(remote_states_mutex_);
+        pending_privacy_releases_[key.key_code] = key;
+      }
+#endif
+    }
   }
 }
 
+void KeyboardController::ReleaseAllRemotePressedKeys(const char* reason) {
+  std::vector<std::string> remotes;
+  {
+    std::lock_guard lock(remote_states_mutex_);
+    for (const auto& [id, state] : remote_states_) remotes.push_back(id);
+  }
+  for (const auto& id : remotes) ReleaseRemotePressedKeys(id, reason);
+  CheckRemoteTimeouts();
+}
+
 void KeyboardController::CheckRemoteTimeouts() {
+#ifdef _WIN32
+  bool pending = false;
+  {
+    std::lock_guard lock(remote_states_mutex_);
+    pending = !pending_privacy_releases_.empty();
+  }
+  // A key-up rejected on the secure desktop is retained until the ordinary
+  // desktop returns. Never route cleanup through the security UI helper.
+  if (pending && IsWindowsPrivacyDesktopAvailable()) {
+    std::unordered_map<int, PressedKey> releases;
+    {
+      std::lock_guard lock(remote_states_mutex_);
+      releases.swap(pending_privacy_releases_);
+    }
+    for (const auto& [code, key] : releases) {
+      if (!owner_.devices_.SendKeyboardCommand(code, false, key.scan_code, key.extended)) {
+        std::lock_guard lock(remote_states_mutex_);
+        pending_privacy_releases_[code] = key;
+      }
+    }
+  }
+#endif
   const uint32_t now = static_cast<uint32_t>(SDL_GetTicks());
   std::vector<std::string> timed_out_remotes;
   {

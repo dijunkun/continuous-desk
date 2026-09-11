@@ -63,6 +63,8 @@ class ScreenCapturerDxgi : public ScreenCapturer {
   Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3d_context_;
   Microsoft::WRL::ComPtr<IDXGIOutputDuplication> duplication_;
   Microsoft::WRL::ComPtr<ID3D11Texture2D> staging_;
+  DXGI_MODE_ROTATION rotation_ = DXGI_MODE_ROTATION_IDENTITY;
+  uint64_t duplication_generation_ = 0;
 
   std::atomic<bool> running_{false};
   std::atomic<bool> paused_{false};

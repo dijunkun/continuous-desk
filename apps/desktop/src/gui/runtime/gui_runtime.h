@@ -8,6 +8,7 @@
 #define _GUI_RUNTIME_H_
 
 #include <atomic>
+#include <deque>
 #include <memory>
 #include <string>
 
@@ -16,6 +17,7 @@
 #include "features/file_transfer/file_transfer_manager.h"
 #include "features/input/keyboard_controller.h"
 #include "features/settings/settings_manager.h"
+#include "privacy_controller.h"
 #include "runtime/gui_state.h"
 #include "runtime/peer_event_handler.h"
 
@@ -55,9 +57,13 @@ class GuiRuntime : protected gui_detail::GuiState {
   void HandleConnectionStatusChange();
   void HandlePendingPresenceProbe();
   void HandlePresenceProbeTimeout();
+  bool HasActiveSession();
   void HandleServerControllerDisconnected(const std::string& remote_id,
                                           const char* reason);
   void HandleWindowsServiceIntegration();
+  void HandlePrivacy();
+  bool IsAuthorizedController(const std::string& remote_id);
+  void QueuePrivacyCommand(const std::string& remote_id, const PrivacyCommand& command);
 
   void CloseRemoteSession(std::shared_ptr<RemoteSession> props);
   void CloseAllRemoteSessions();
@@ -87,6 +93,12 @@ class GuiRuntime : protected gui_detail::GuiState {
   bool EnsureMacAccessibilityPermission();
 #endif
 
+  PrivacyController privacy_;
+  std::mutex privacy_commands_mutex_;
+  std::deque<std::pair<std::string, PrivacyCommand>> privacy_commands_;
+  uint32_t last_privacy_revision_ = 0;
+  uint64_t last_privacy_status_tick_ = 0;
+  bool privacy_was_paused_ = false;
   ClipboardController clipboard_;
   SessionDeviceManager devices_;
   FileTransferManager transfers_;

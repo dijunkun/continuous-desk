@@ -9,6 +9,7 @@ namespace crossdesk {
 // keyboard input so the controller hook can ignore only its own injections
 // while still accepting input from accessibility tools or remote sessions.
 inline constexpr std::uintptr_t kInjectedKeyboardInputMarker = 0x4353444B;
+inline constexpr std::uintptr_t kInjectedMouseInputMarker = 0x4353444D;
 
 }  // namespace crossdesk
 

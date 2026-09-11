@@ -157,6 +157,14 @@ struct RemoteSession {
   std::string audio_capture_button_label_ = "Audio Capture";
   std::string remote_host_name_;
   bool remote_service_status_received_ = false;
+  std::mutex privacy_status_mutex_;
+  PrivacyStatus privacy_status_{};
+  bool privacy_status_received_ = false;
+  bool privacy_command_pending_ = false;
+  bool privacy_block_local_input_ = true;
+  uint64_t privacy_command_tick_ = 0;
+  uint32_t privacy_request_revision_ = 0;
+  uint64_t privacy_status_tick_ = 0;
   bool remote_service_available_ = false;
   std::string remote_interactive_stage_;
   std::vector<DisplayInfo> display_info_list_;

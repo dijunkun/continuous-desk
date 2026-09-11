@@ -682,7 +682,9 @@ jobs:
           $portableFiles = @(
             @("crossdesk.exe", "CrossDesk.exe"),
             @("crossdesk_service.exe", "crossdesk_service.exe"),
-            @("crossdesk_session_helper.exe", "crossdesk_session_helper.exe")
+            @("crossdesk_session_helper.exe", "crossdesk_session_helper.exe"),
+            @("crossdesk_privacy_cursor_helper.exe", "crossdesk_privacy_cursor_helper.exe"),
+            @("crossdesk_privacy_window.dll", "crossdesk_privacy_window.dll")
           )
 
           foreach ($file in $portableFiles) {

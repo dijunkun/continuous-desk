@@ -88,6 +88,8 @@ void PeerEventHandler::OnReceiveDataBuffer(
   }
 
   std::string source_id = std::string(src_id, src_id_size);
+  if (!runtime->privacy_.RemoteAllowed() &&
+      (source_id == runtime->clipboard_label_ || source_id == runtime->file_label_)) return;
   if (source_id == runtime->file_label_) {
     std::string remote_user_id = std::string(user_id, user_id_size);
 
@@ -147,6 +149,48 @@ void PeerEventHandler::OnReceiveDataBuffer(
   }
 
   std::string remote_id(user_id, user_id_size);
+  if (remote_action.type == ControlType::privacy_status) {
+    if (auto props = runtime->FindRemoteSession(remote_id)) {
+      if (source_id != props->control_data_label_) return;
+      std::lock_guard lock(props->privacy_status_mutex_);
+      if (!props->privacy_status_received_ ||
+          static_cast<int32_t>(remote_action.ps.revision - props->privacy_status_.revision) >= 0) {
+        props->privacy_status_ = remote_action.ps;
+        props->privacy_status_received_ = true;
+        props->privacy_status_tick_ = SDL_GetTicks();
+        if (static_cast<int32_t>(remote_action.ps.revision - props->privacy_request_revision_) > 0 &&
+            remote_action.ps.state != PrivacyState::starting &&
+            remote_action.ps.state != PrivacyState::stopping)
+          props->privacy_command_pending_ = false;
+      }
+    }
+    return;
+  }
+  if (remote_action.type == ControlType::privacy_command) {
+    if (source_id == runtime->control_data_label_)
+      runtime->QueuePrivacyCommand(remote_id, remote_action.pc);
+    return;
+  }
+  const bool operates_host = remote_action.type == ControlType::mouse ||
+      remote_action.type == ControlType::keyboard || remote_action.type == ControlType::keyboard_state ||
+      remote_action.type == ControlType::service_command || remote_action.type == ControlType::display_id ||
+      remote_action.type == ControlType::audio_capture;
+  if (operates_host) {
+    if (!runtime->IsAuthorizedController(remote_id)) return;
+#ifdef _WIN32
+    // KeyboardController checks the desktop immediately before each native
+    // key injection, including state reconciliation and cleanup. Avoid a
+    // second synchronous session query for every received keyboard packet.
+    const bool keyboard_input = remote_action.type == ControlType::keyboard ||
+                                remote_action.type == ControlType::keyboard_state;
+    if (!keyboard_input && runtime->privacy_.Engaged() &&
+        !IsWindowsPrivacyDesktopAvailable()) {
+      runtime->privacy_.Fail("Secure desktop or lock screen; privacy cannot cover system security UI. Remote input paused.");
+      return;
+    }
+#endif
+    if (!runtime->privacy_.RemoteAllowed()) return;
+  }
   if (remote_action.type == ControlType::service_status) {
     if (auto props = runtime->FindRemoteSession(remote_id)) {
       runtime->ApplyRemoteServiceStatus(*props, remote_action.ss);
@@ -155,6 +199,10 @@ void PeerEventHandler::OnReceiveDataBuffer(
   }
 
   if (remote_action.type == ControlType::service_command) {
+    if (runtime->privacy_.Engaged()) {
+      runtime->privacy_.Fail("Security shortcuts require leaving privacy mode; remote operation paused. Turn privacy off first.");
+      return;
+    }
 #if _WIN32
     if (remote_action.c.flag == ServiceCommandFlag::send_sas) {
       runtime->pending_windows_service_sas_.store(true,
@@ -258,7 +306,7 @@ void PeerEventHandler::OnReceiveDataBuffer(
           std::chrono::steady_clock::now();
     }
 #if _WIN32
-    if (runtime->local_service_status_received_ &&
+    if (!runtime->privacy_.Engaged() && runtime->local_service_status_received_ &&
         IsSecureDesktopInteractionRequired(runtime->local_interactive_stage_) &&
         remote_action.type != ControlType::keyboard &&
         remote_action.type != ControlType::keyboard_state) {

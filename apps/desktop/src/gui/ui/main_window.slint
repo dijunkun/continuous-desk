@@ -50,6 +50,7 @@ export global UiStrings {
     in-out property <string> self-hosted: "Self-hosted server";
     in-out property <string> autostart: "Start with system";
     in-out property <string> daemon: "Run in background";
+    in-out property <string> privacy-on-connect: "Privacy screen on connect";
     in-out property <string> file-save-path: "File save path";
     in-out property <string> default-desktop: "Desktop";
     in-out property <string> server-host: "Server host";
@@ -246,6 +247,8 @@ export component MainWindow inherits Window {
     in-out property <bool> self-hosted-enabled: false;
     in-out property <bool> autostart-enabled: false;
     in-out property <bool> daemon-enabled: false;
+    in-out property <bool> privacy-setting-visible: false;
+    in-out property <bool> privacy-on-connect-enabled: true;
     in-out property <string> file-save-path: "";
     in-out property <string> server-host: "";
     in-out property <string> server-port: "";
@@ -1444,6 +1447,11 @@ export component MainWindow inherits Window {
                         height: 30px;
                         Text { x: 8px; y: 3px; width: root.compact-language ? 94px : 162px; height: 24px; text: UiStrings.language; font-size: ImGuiFontStyle.body; overflow: elide; vertical-alignment: center; }
                         CompactComboBox { x: root.compact-language ? 106px : 174px; y: 2px; model: ["中文", "English", "Русский"]; current-index <=> root.language-index; }
+                    }
+                    if root.privacy-setting-visible: Rectangle {
+                        height: 30px;
+                        Text { x: 8px; y: 3px; width: root.compact-language ? 145px : 212px; height: 24px; text: UiStrings.privacy-on-connect; font-size: ImGuiFontStyle.body; overflow: elide; vertical-alignment: center; }
+                        ImGuiCheckBox { x: root.compact-language ? 157px : 224px; y: 3px; checked <=> root.privacy-on-connect-enabled; }
                     }
                     Rectangle {
                         height: 30px;

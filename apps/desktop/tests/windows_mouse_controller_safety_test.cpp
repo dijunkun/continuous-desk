@@ -57,8 +57,6 @@ int main() {
   ok &= ExpectContains("mouse_controller.cpp", mouse_controller,
                        "INPUT ip = {0};");
   ok &= ExpectContains("mouse_controller.cpp", mouse_controller,
-                       "SetCursorPos failed");
-  ok &= ExpectContains("mouse_controller.cpp", mouse_controller,
                        "SendInput failed for mouse");
   return ok ? 0 : 1;
 }

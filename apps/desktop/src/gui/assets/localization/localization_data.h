@@ -20,6 +20,13 @@ struct TranslationRow {
 
 // Single source of truth for all UI strings.
 #define CROSSDESK_LOCALIZATION_ALL(X)                                          \
+  X(privacy_enable, u8"开启隐私屏", "Enable privacy screen", u8"Включить приватный экран") \
+  X(privacy_disable, u8"关闭隐私屏 / 恢复操作", "Turn privacy off / recover", u8"Выключить / восстановить") \
+  X(privacy_block_input, u8"开启时屏蔽本地输入", "Block local input on enable", u8"Блокировать локальный ввод") \
+  X(privacy_unknown, u8"隐私屏：未收到被控端确认（旧版本可能不支持）", "Privacy: no host confirmation (older hosts may not support it)", u8"Приватность: нет подтверждения от узла") \
+  X(privacy_pending, u8"隐私屏：等待被控端完成验证", "Privacy: waiting for host verification", u8"Приватность: ожидание проверки") \
+  X(privacy_timeout, u8"隐私屏状态未知：被控端确认超时，可关闭后重试", "Privacy state unknown: host confirmation timed out; turn off to recover", u8"Статус неизвестен: время ожидания истекло") \
+  X(privacy_paused, u8"隐私保护未就绪，远程操作已暂停。可在快捷菜单关闭隐私屏恢复。", "Privacy protection is not ready; remote operation paused. Turn privacy off in the shortcut menu to recover.", u8"Приватность не готова; удалённое управление приостановлено.") \
   X(local_desktop, u8"本桌面", "Local Desktop", u8"Локальный рабочий стол")    \
   X(local_id, u8"本机ID", "Local ID", u8"Локальный ID")                        \
   X(local_id_copied_to_clipboard, u8"已复制到剪贴板", "Copied to clipboard",   \
@@ -202,6 +209,8 @@ struct TranslationRow {
     "Confirm to delete this connection", u8"Удалить это подключение?")         \
   X(enable_autostart, u8"开机自启:", "Auto Start:", u8"Автозапуск:")           \
   X(enable_daemon, u8"启用守护进程:", "Enable Daemon:", u8"Включить демон:")   \
+  X(privacy_on_connect, u8"被连接时开启隐私屏:", "Privacy screen on connect:", \
+    u8"Приватность при подключении:")                                       \
   X(takes_effect_after_restart, u8"重启后生效", "Takes effect after restart",  \
     u8"Вступит в силу после перезапуска")                                      \
   X(select_file, u8"选择文件发送", "Select File to Send",                      \
@@ -237,6 +246,11 @@ struct TranslationRow {
     u8"Для работы приложения требуются следующие разрешения:")                 \
   X(show_main_window, u8"显示主界面", "Show Main Window",                    \
     u8"Показать главное окно")                                                \
+  X(privacy_verification, u8"隐私屏验证", "Privacy screen verification",       \
+    u8"Проверка приватности")                                                \
+  X(privacy_screen_unlock_hint, u8"按下快捷键，解除隐私屏",                    \
+    "To turn off the privacy screen, press",                                 \
+    u8"Чтобы отключить приватный экран, нажмите")                             \
   X(exit_program, u8"退出", "Exit", u8"Выход")
 
 inline constexpr TranslationRow kTranslationRows[] = {

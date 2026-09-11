@@ -7,6 +7,7 @@
 #ifndef _CONFIG_CENTER_H_
 #define _CONFIG_CENTER_H_
 
+#include <atomic>
 #include <string>
 
 #include "SimpleIni.h"
@@ -50,6 +51,7 @@ class ConfigCenter {
   int SetSelfHosted(bool enable_self_hosted);
   int SetAutostart(bool enable_autostart);
   int SetDaemon(bool enable_daemon);
+  int SetPrivacyScreen(bool enable_privacy_screen);
   int SetPortableServicePromptSuppressed(bool suppressed);
   int SetFileTransferSavePath(const std::string& path);
 
@@ -71,6 +73,7 @@ class ConfigCenter {
   bool IsSelfHosted() const;
   bool IsEnableAutostart() const;
   bool IsEnableDaemon() const;
+  bool IsEnablePrivacyScreen() const;
   bool IsPortableServicePromptSuppressed() const;
   std::string GetFileTransferSavePath() const;
 
@@ -98,6 +101,7 @@ class ConfigCenter {
   bool enable_self_hosted_ = false;
   bool enable_autostart_ = false;
   bool enable_daemon_ = false;
+  std::atomic<bool> enable_privacy_screen_{true};
   bool portable_service_prompt_suppressed_ = false;
   std::string file_transfer_save_path_ = "";
 };

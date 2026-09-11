@@ -1027,6 +1027,9 @@ void GuiApplication::InitializeSettings() {
   language_button_value_ = localization_language_index_;
   localization_language_ =
       static_cast<ConfigCenter::LANGUAGE>(localization_language_index_);
+  privacy_.SetText({
+      localization::privacy_verification[localization_language_index_],
+      localization::privacy_screen_unlock_hint[localization_language_index_]});
 }
 
 bool GuiApplication::InitializeSDL() {
@@ -1227,6 +1230,11 @@ void GuiApplication::ResetSettingsUi() {
   ui_->main->set_self_hosted_enabled(enable_self_hosted_);
   ui_->main->set_autostart_enabled(enable_autostart_);
   ui_->main->set_daemon_enabled(enable_daemon_);
+#ifdef _WIN32
+  ui_->main->set_privacy_setting_visible(true);
+  ui_->main->set_privacy_on_connect_enabled(
+      config_center_->IsEnablePrivacyScreen());
+#endif
   ui_->main->set_file_save_path(file_transfer_save_path_buf_);
   ui_->main->set_server_host(signal_server_ip_self_);
   ui_->main->set_server_port(signal_server_port_self_);
@@ -1587,6 +1595,37 @@ void GuiApplication::BindStreamCallbacks() {
     SendReliableDataFrame(props->peer_, message.c_str(), message.size(),
                           props->control_data_label_.c_str());
   });
+  stream->on_toggle_privacy([this] {
+    auto props = SelectedSession();
+    if (!props || !props->peer_ || !props->control_mouse_ ||
+        props->connection_status_.load() != ConnectionStatus::Connected) return;
+    RemoteAction action{};
+    action.type = ControlType::privacy_command;
+    {
+      std::lock_guard lock(props->privacy_status_mutex_);
+      const auto& status = props->privacy_status_;
+      action.pc.flag = status.overlay_active || status.remote_paused || status.state == PrivacyState::on ||
+          status.state == PrivacyState::failed ? PrivacyCommandFlag::disable : PrivacyCommandFlag::enable;
+      action.pc.block_local_input = props->privacy_block_local_input_;
+      props->privacy_command_pending_ = true;
+      props->privacy_command_tick_ = SDL_GetTicks();
+      props->privacy_request_revision_ = status.revision;
+    }
+    const auto message = action.to_json();
+    if (SendReliableDataFrame(props->peer_, message.data(), message.size(),
+                              props->control_data_label_.c_str()) != 0) {
+      std::lock_guard lock(props->privacy_status_mutex_);
+      props->privacy_command_pending_ = false;
+      props->privacy_status_received_ = false;
+      LOG_WARN("Privacy command send failed, remote_id={}", props->remote_id_);
+    }
+  });
+  stream->on_toggle_privacy_input([this] {
+    if (auto props = SelectedSession()) {
+      std::lock_guard lock(props->privacy_status_mutex_);
+      props->privacy_block_local_input_ = !props->privacy_block_local_input_;
+    }
+  });
   stream->on_toggle_mouse_control([this] {
     auto props = SelectedSession();
     if (!props || !props->connection_established_) {
@@ -1794,6 +1833,7 @@ void GuiApplication::Tick() {
   HandleConnectionStatusChange();
   HandlePendingPresenceProbe();
   HandlePresenceProbeTimeout();
+  HandlePrivacy();
   HandleWindowsServiceIntegration();
 #if defined(__linux__) && !defined(__APPLE__)
   SyncXWaylandWindowActivation();
@@ -2104,7 +2144,7 @@ void GuiApplication::SyncMainWindow() {
   ui_->main->set_latest_version(UiText(latest_version_));
   ui_->main->set_release_name(UiText(release_name_));
   ui_->main->set_release_date(UiText(release_date_));
-  ui_->main->set_settings_session_active(stream_window_inited_);
+  ui_->main->set_settings_session_active(HasActiveSession());
 #if (((defined(_WIN32) || defined(__linux__)) && !defined(__aarch64__) && \
       !defined(__arm__) && USE_CUDA) ||                                   \
      defined(__APPLE__))
@@ -2507,6 +2547,29 @@ void GuiApplication::SyncStreamWindow() {
               ? localization::receiving_screen[localization_language_index_]
               : std::string{}));
   (*ui_->stream)->set_mouse_control_enabled(props->control_mouse_);
+  {
+    std::lock_guard lock(props->privacy_status_mutex_);
+    const auto& status = props->privacy_status_;
+    const uint64_t now = SDL_GetTicks();
+    const bool timeout = props->privacy_command_pending_ && now - props->privacy_command_tick_ > 15000;
+    const bool stale = props->privacy_status_received_ && now - props->privacy_status_tick_ > 5000;
+    const bool pending = props->privacy_command_pending_ && !timeout;
+    const bool active = status.overlay_active || status.remote_paused || status.state == PrivacyState::on || status.state == PrivacyState::failed;
+    (*ui_->stream)->set_privacy_active(active);
+    (*ui_->stream)->set_privacy_can_toggle(props->control_mouse_ &&
+        props->connection_status_.load() == ConnectionStatus::Connected && !pending &&
+        (active || (props->privacy_status_received_ && status.supported && !stale)));
+    (*ui_->stream)->set_privacy_can_change_input(props->control_mouse_ && !active && !pending && status.input_block_supported);
+    (*ui_->stream)->set_privacy_block_input(active ? status.input_blocked : props->privacy_block_local_input_);
+    (*ui_->stream)->set_privacy_remote_paused(status.remote_paused || (active && (stale || timeout)));
+    const int language = localization_language_index_;
+    std::string text = !props->privacy_status_received_ ? localization::privacy_unknown[language] :
+        (timeout || stale) ? localization::privacy_timeout[language] :
+        pending ? localization::privacy_pending[language] :
+        status.remote_paused ? localization::privacy_paused[language] : status.reason;
+    if (status.remote_paused && !pending) text += std::string("\n") + status.reason;
+    (*ui_->stream)->set_privacy_status_text(UiText(text));
+  }
   int remote_cursor_shape =
       static_cast<int>(RemoteCursorShape::default_cursor);
   bool remote_cursor_active = false;
@@ -2750,7 +2813,14 @@ void GuiApplication::SyncServerWindow() {
                     });
   }
 
-  if (has_connected_controller && !ui_->server) {
+  // Keep the local connection panel out of captured privacy sessions and
+  // transitions; it is unnecessary while the physical screens are covered.
+  const auto privacy_status = privacy_.Snapshot();
+  const bool privacy_covering = privacy_status.overlay_active ||
+      privacy_status.state == PrivacyState::starting ||
+      privacy_status.state == PrivacyState::stopping;
+  const bool show_controller_window = has_connected_controller && !privacy_covering;
+  if (show_controller_window && !ui_->server) {
     ui_->server.emplace(ui::ServerWindow::create());
     RegisterFontAwesome((*ui_->server)->window());
     (*ui_->server)->set_controllers(ui_->controller_model);
@@ -2774,7 +2844,7 @@ void GuiApplication::SyncServerWindow() {
     server_window_created_ = true;
     server_window_inited_ = true;
   }
-  if (!has_connected_controller && ui_->server) {
+  if (!show_controller_window && ui_->server) {
     (*ui_->server)->hide();
     ui_->server.reset();
     server_window_created_ = false;
@@ -2918,6 +2988,9 @@ void GuiApplication::SaveSettingsFromUi() {
       static_cast<ConfigCenter::LANGUAGE>(language_button_value_);
   localization_language_index_ = language_button_value_;
   config_center_->SetLanguage(localization_language_);
+  privacy_.SetText({
+      localization::privacy_verification[localization_language_index_],
+      localization::privacy_screen_unlock_hint[localization_language_index_]});
   config_center_->SetVideoQuality(
       static_cast<ConfigCenter::VIDEO_QUALITY>(video_quality_button_value_));
   config_center_->SetVideoFrameRate(static_cast<ConfigCenter::VIDEO_FRAME_RATE>(
@@ -2934,6 +3007,13 @@ void GuiApplication::SaveSettingsFromUi() {
   config_center_->SetSelfHosted(enable_self_hosted_);
   config_center_->SetAutostart(enable_autostart_);
   config_center_->SetDaemon(enable_daemon_);
+#ifdef _WIN32
+  if (config_center_->SetPrivacyScreen(main->get_privacy_on_connect_enabled()) !=
+      0) {
+    main->set_privacy_on_connect_enabled(
+        config_center_->IsEnablePrivacyScreen());
+  }
+#endif
 
   const std::string path(main->get_file_save_path());
   std::memset(file_transfer_save_path_buf_, 0,
@@ -2965,7 +3045,7 @@ void GuiApplication::SaveSettingsFromUi() {
   file_transfer_save_path_last_ = path;
   ui_->localized_language = -1;
 
-  if (!stream_window_inited_) {
+  if (!HasActiveSession()) {
     CloseAllRemoteSessions();
     CreateConnectionPeer();
   }
@@ -3267,9 +3347,12 @@ void GuiApplication::Cleanup() {
 #if _WIN32 && CROSSDESK_PORTABLE
   JoinPortableWindowsServiceInstallThread();
 #endif
+  privacy_.Fail("Application exiting; remote operation paused");
   clipboard_.Shutdown();
   keyboard_.ForceReleasePressedKeys();
+  keyboard_.ReleaseAllRemotePressedKeys("application_exit");
   devices_.DestroyDevices();
+  privacy_.Shutdown();
   devices_.DestroyFactories();
   CloseAllRemoteSessions();
   WaitForSessionCleanup();

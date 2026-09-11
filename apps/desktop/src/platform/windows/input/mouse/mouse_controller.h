@@ -8,6 +8,7 @@
 #define _MOUSE_CONTROLLER_H_
 
 #include <vector>
+#include <atomic>
 
 #include <remote_action.h>
 
@@ -25,9 +26,11 @@ class PlatformMouseController final : public MouseController {
   virtual int Init(std::vector<DisplayInfo> display_info_list);
   virtual int Destroy();
   virtual int SendMouseCommand(RemoteAction remote_action, int display_index);
+  int ReleasePressedButtons();
 
  private:
   std::vector<DisplayInfo> display_info_list_;
+  std::atomic<unsigned> pressed_buttons_{0};
 };
 }  // namespace crossdesk
 #endif

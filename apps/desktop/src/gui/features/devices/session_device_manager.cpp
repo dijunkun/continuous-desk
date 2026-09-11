@@ -10,6 +10,10 @@
 #include "rd_log.h"
 #include "runtime/gui_runtime.h"
 #include "speaker_capturer_factory.h"
+#ifdef _WIN32
+#include "platform/windows/screen_capturer/screen_capturer_win.h"
+#include "platform/windows/input/mouse/mouse_controller.h"
+#endif
 
 namespace crossdesk {
 namespace {
@@ -28,7 +32,7 @@ SessionDeviceManager::SessionDeviceManager(GuiRuntime &owner)
                 SpeakerCapturerFactory().Create());
           },
           [this](unsigned char *data, size_t size, const char *) {
-            if (!owner_.peer_) return;
+            if (!owner_.peer_ || !owner_.privacy_.RemoteAllowed()) return;
             MiniRtcAudioFrame frame{};
             frame.data = reinterpret_cast<const char *>(data);
             frame.size = size;
@@ -74,6 +78,10 @@ int SessionDeviceManager::InitializeScreenCapturer() {
   if (!screen_capturer_) {
     screen_capturer_ =
         static_cast<ScreenCapturer *>(screen_capturer_factory_->Create());
+#ifdef _WIN32
+    if (auto windows = dynamic_cast<ScreenCapturerWin*>(screen_capturer_))
+      windows->SetPrivacyController(&owner_.privacy_);
+#endif
   }
 
   last_frame_time_ = {};
@@ -92,6 +100,7 @@ int SessionDeviceManager::InitializeScreenCapturer() {
       fps, [this, fps](unsigned char *data, int size, int width, int height,
                        const char *display_name,
                        const MiniRtcNativeVideoFrame *native_frame) {
+        if (!owner_.privacy_.RemoteAllowed()) return;
         const auto now_time = std::chrono::steady_clock::now();
         if (!ShouldSendCapturedFrame(now_time, fps)) {
           return;
@@ -154,6 +163,9 @@ int SessionDeviceManager::InitializeScreenCapturer() {
         }
 
         MiniRtcVideoFrame frame{};
+        // A new controller can connect after this callback's first gate check
+        // while it is collecting the Connected peer IDs above.
+        if (!owner_.privacy_.RemoteAllowed()) return;
         frame.data = reinterpret_cast<const char *>(data);
         frame.size = size;
         frame.width = width;
@@ -215,6 +227,13 @@ int SessionDeviceManager::StopScreenCapturer() {
   }
   return 0;
 }
+
+#ifdef _WIN32
+void SessionDeviceManager::ReleaseRemoteMouseButtons() {
+  if (auto mouse = dynamic_cast<PlatformMouseController*>(mouse_controller_))
+    mouse->ReleasePressedButtons();
+}
+#endif
 
 void SessionDeviceManager::StartSpeakerCapturer() {
   speaker_capture_.SetEnabled(true);
@@ -488,6 +507,7 @@ void SessionDeviceManager::DrainCapturedKeyboardInput() {
     std::lock_guard<std::mutex> lock(captured_keyboard_inputs_mutex_);
     inputs.swap(captured_keyboard_inputs_);
   }
+  if (owner_.privacy_.Snapshot().input_blocked) return;
   for (const CapturedKeyboardInput &input : inputs) {
     owner_.keyboard_.SendKeyCommand(input.key_code, input.is_down,
                                     input.scan_code, input.extended);
@@ -508,6 +528,7 @@ bool SessionDeviceManager::SendKeyboardCommand(int key_code, bool is_down,
 
 void SessionDeviceManager::SendMouseCommand(const RemoteAction &action,
                                             int selected_display) {
+  if (!owner_.privacy_.RemoteAllowed()) return;
   if (mouse_controller_) {
     mouse_controller_->SendMouseCommand(action, selected_display);
   }

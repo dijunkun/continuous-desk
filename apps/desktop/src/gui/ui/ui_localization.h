@@ -71,6 +71,7 @@ inline int ApplyMainWindowStrings(
       Text(localization::self_hosted_server_config[language]));
   strings.set_autostart(Text(localization::enable_autostart[language]));
   strings.set_daemon(Text(localization::enable_daemon[language]));
+  strings.set_privacy_on_connect(Text(localization::privacy_on_connect[language]));
   strings.set_file_save_path(
       Text(localization::file_transfer_save_path[language]));
   strings.set_default_desktop(Text(localization::default_desktop[language]));
@@ -138,6 +139,9 @@ inline int ApplyStreamWindowStrings(
   auto& strings = window->template global<ui::StreamStrings>();
   strings.set_select_display(Text(localization::select_display[language]));
   strings.set_send_shortcut(Text(localization::send_shortcut[language]));
+  strings.set_privacy_enable(Text(localization::privacy_enable[language]));
+  strings.set_privacy_disable(Text(localization::privacy_disable[language]));
+  strings.set_privacy_block_input(Text(localization::privacy_block_input[language]));
   strings.set_control_mouse(Text(localization::control_mouse[language]));
   strings.set_release_mouse(Text(localization::release_mouse[language]));
   strings.set_audio(Text(localization::audio_capture[language]));

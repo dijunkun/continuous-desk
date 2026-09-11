@@ -106,6 +106,19 @@ std::string RemoteAction::ToJson(const RemoteAction& action) {
     case ControlType::service_command:
       object["service_command"] = {{"flag", action.c.flag}};
       break;
+    case ControlType::privacy_command:
+      object["privacy_command"] = {{"flag", action.pc.flag},
+                                   {"block_local_input", action.pc.block_local_input}};
+      break;
+    case ControlType::privacy_status:
+      object["privacy_status"] = {{"state", action.ps.state},
+          {"supported", action.ps.supported},
+          {"input_block_supported", action.ps.input_block_supported},
+          {"overlay_active", action.ps.overlay_active},
+          {"input_blocked", action.ps.input_blocked},
+          {"remote_paused", action.ps.remote_paused},
+          {"revision", action.ps.revision}, {"reason", action.ps.reason}};
+      break;
     case ControlType::host_infomation: {
       json displays = json::array();
       for (std::size_t index = 0; index < action.i.display_num; ++index) {
@@ -228,6 +241,33 @@ bool RemoteAction::FromJson(const std::string& json_string,
         output.c.flag = static_cast<ServiceCommandFlag>(
             object.at("service_command").at("flag").get<int>());
         break;
+      case ControlType::privacy_command: {
+        const auto& command = object.at("privacy_command");
+        const int flag = command.at("flag").get<int>();
+        if (flag < 0 || flag > 2) return false;
+        output.pc.flag = static_cast<PrivacyCommandFlag>(flag);
+        output.pc.block_local_input = command.at("block_local_input").get<bool>();
+        break;
+      }
+      case ControlType::privacy_status: {
+        const auto& status = object.at("privacy_status");
+        const int state = status.at("state").get<int>();
+        const auto reason = status.at("reason").get<std::string>();
+        if (state < 0 || state > 5 || reason.size() >= sizeof(output.ps.reason) ||
+            reason.find('\0') != std::string::npos) return false;
+        output.ps.state = static_cast<PrivacyState>(state);
+        output.ps.supported = status.at("supported").get<bool>();
+        output.ps.input_block_supported = status.at("input_block_supported").get<bool>();
+        output.ps.overlay_active = status.at("overlay_active").get<bool>();
+        output.ps.input_blocked = status.at("input_blocked").get<bool>();
+        output.ps.remote_paused = status.at("remote_paused").get<bool>();
+        output.ps.revision = status.at("revision").get<uint32_t>();
+        std::memcpy(output.ps.reason, reason.c_str(), reason.size() + 1);
+        // Never render a contradictory success from a malformed peer.
+        if (output.ps.state == PrivacyState::on &&
+            (!output.ps.supported || !output.ps.overlay_active || output.ps.remote_paused)) return false;
+        break;
+      }
       case ControlType::host_infomation: {
         ResetHostInfo(output.i);
         owns_host_info = true;

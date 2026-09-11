@@ -46,6 +46,9 @@ public:
   int InitializeScreenCapturer();
   int StartScreenCapturer();
   int StopScreenCapturer();
+#ifdef _WIN32
+  void ReleaseRemoteMouseButtons();
+#endif
   // Requests are asynchronous; Stop drains/revokes audio delivery before
   // returning so the connection peer can be destroyed safely.
   void StartSpeakerCapturer();

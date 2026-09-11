@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "screen_capturer.h"
+#include "privacy_controller.h"
 
 namespace crossdesk {
 
@@ -43,10 +44,12 @@ class ScreenCapturerWin : public ScreenCapturer {
   int ResetToInitialMonitor() override;
 
   std::vector<DisplayInfo> GetDisplayInfoList() override;
+  void SetPrivacyController(PrivacyController* privacy) { privacy_ = privacy; }
 
  private:
   std::unique_ptr<ScreenCapturer> impl_;
-  bool impl_is_wgc_plugin_ = false;
+  PrivacyController* privacy_ = nullptr;
+  void NotifyPrivacyCapture(bool running);
   int fps_ = 60;
   cb_desktop_data cb_;
   cb_desktop_data cb_orig_;
@@ -86,9 +89,13 @@ class ScreenCapturerWin : public ScreenCapturer {
 
   void BuildCanonicalFromImpl();
   void RebuildAliasesFromImpl();
+  void RestoreMonitor(int monitor_index);
+  bool TryStartBackend(std::unique_ptr<ScreenCapturer> candidate,
+                       int monitor_index);
   void EmitCapturedFrame(unsigned char* data, int size, int width, int height,
                          const char* stream_id,
-                         const MiniRtcNativeVideoFrame* native_frame = nullptr);
+                         const MiniRtcNativeVideoFrame* native_frame = nullptr,
+                         bool from_secure_desktop = false);
   void StopSecureCaptureThread();
   bool RestartCaptureBackendAfterSecureDesktop();
   void SecureDesktopCaptureLoop();

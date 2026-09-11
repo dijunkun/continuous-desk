@@ -1,0 +1,13 @@
+/*
+ * @Author: DI JUNKUN
+ * @Date: 2026-09-11
+ * Copyright (c) 2026 by DI JUNKUN, All Rights Reserved.
+ */
+
+IDI_CROSSDESK_LOGO ICON "crossdesk.ico"
+
+#define CROSSDESK_FILE_DESCRIPTION "CrossDesk Privacy Window"
+#define CROSSDESK_ORIGINAL_FILENAME "crossdesk_privacy_window.dll"
+#define CROSSDESK_FILE_TYPE VFT_DLL
+
+#include "version_info.rcinc"

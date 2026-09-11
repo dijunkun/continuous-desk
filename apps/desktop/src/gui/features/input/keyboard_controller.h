@@ -30,6 +30,7 @@ public:
                         const RemoteAction &remote_action);
   void ReleaseRemotePressedKeys(const std::string &remote_id,
                                 const char *reason);
+  void ReleaseAllRemotePressedKeys(const char* reason);
   void CheckRemoteTimeouts();
 
 private:
@@ -58,6 +59,9 @@ private:
   uint32_t last_heartbeat_tick_ = 0;
   std::unordered_map<std::string, RemoteState> remote_states_;
   std::mutex remote_states_mutex_;
+#ifdef _WIN32
+  std::unordered_map<int, PressedKey> pending_privacy_releases_;
+#endif
 };
 
 } // namespace crossdesk

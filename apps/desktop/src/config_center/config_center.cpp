@@ -119,6 +119,8 @@ int ConfigCenter::Load() {
   enable_autostart_ =
       ini_.GetBoolValue(section_, "enable_autostart", enable_autostart_);
   enable_daemon_ = ini_.GetBoolValue(section_, "enable_daemon", enable_daemon_);
+  enable_privacy_screen_.store(
+      ini_.GetBoolValue(section_, "enable_privacy_screen", true));
   portable_service_prompt_suppressed_ =
       ini_.GetBoolValue(section_, "portable_service_prompt_suppressed",
                         portable_service_prompt_suppressed_);
@@ -165,6 +167,8 @@ int ConfigCenter::Save() {
 
   ini_.SetBoolValue(section_, "enable_autostart", enable_autostart_);
   ini_.SetBoolValue(section_, "enable_daemon", enable_daemon_);
+  ini_.SetBoolValue(section_, "enable_privacy_screen",
+                    enable_privacy_screen_.load());
   ini_.SetBoolValue(section_, "portable_service_prompt_suppressed",
                     portable_service_prompt_suppressed_);
 
@@ -370,6 +374,21 @@ int ConfigCenter::SetDaemon(bool enable_daemon) {
   return 0;
 }
 
+int ConfigCenter::SetPrivacyScreen(bool enable_privacy_screen) {
+  const bool previous = enable_privacy_screen_.load();
+  if (previous == enable_privacy_screen) return 0;
+  ini_.SetBoolValue(section_, "enable_privacy_screen", enable_privacy_screen);
+  if (ini_.SaveFile(config_path_.c_str()) < 0) {
+    ini_.SetBoolValue(section_, "enable_privacy_screen", previous);
+    LOG_ERROR("Failed to save automatic privacy screen preference");
+    return -1;
+  }
+  // RTC callbacks read only the value committed by the settings thread.
+  enable_privacy_screen_.store(enable_privacy_screen);
+  LOG_INFO("Privacy screen on incoming connection: {}", enable_privacy_screen);
+  return 0;
+}
+
 int ConfigCenter::SetPortableServicePromptSuppressed(bool suppressed) {
   portable_service_prompt_suppressed_ = suppressed;
   ini_.SetBoolValue(section_, "portable_service_prompt_suppressed",
@@ -436,6 +455,10 @@ bool ConfigCenter::IsSelfHosted() const { return enable_self_hosted_; }
 bool ConfigCenter::IsEnableAutostart() const { return enable_autostart_; }
 
 bool ConfigCenter::IsEnableDaemon() const { return enable_daemon_; }
+
+bool ConfigCenter::IsEnablePrivacyScreen() const {
+  return enable_privacy_screen_.load();
+}
 
 bool ConfigCenter::IsPortableServicePromptSuppressed() const {
   return portable_service_prompt_suppressed_;

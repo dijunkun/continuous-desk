@@ -156,12 +156,40 @@ function setup_targets()
             add_frameworks("Security", "CoreFoundation")
         end
 
+    target("privacy")
+        set_kind("object")
+        add_deps("rd_log", "crossdesk_wire")
+        add_files("apps/desktop/src/privacy/privacy_controller.cpp")
+        add_includedirs("apps/desktop/src/privacy", {public = true})
+        if is_os("windows") then
+            add_files("apps/desktop/src/platform/windows/privacy/*.cpp")
+            add_deps("crossdesk_privacy_cursor_helper")
+            add_deps("crossdesk_privacy_window", {inherit = false})
+            add_includedirs("apps/desktop/src/platform/windows/input")
+            add_syslinks("Wtsapi32", "Ole32", {public = true})
+        end
+
+    if is_os("windows") then
+        target("crossdesk_privacy_window")
+            set_kind("shared")
+            set_runtimes("MT")
+            add_files("apps/desktop/src/platform/windows/privacy/band_module/main.cpp")
+            add_files("apps/desktop/src/platform/windows/privacy/band_module/privacy_cover_renderer.cpp")
+            add_files("apps/desktop/resources/windows/crossdesk_privacy_window.rc")
+            add_syslinks("user32", "gdi32", "dwmapi")
+
+        target("crossdesk_privacy_cursor_helper")
+            set_kind("binary")
+            add_files("apps/desktop/src/platform/windows/privacy/cursor_helper/main.cpp")
+    end
+
     target("screen_capturer")
         set_kind("object")
         add_deps("rd_log", "common", "crossdesk_wire")
         add_includedirs("apps/desktop/src/screen_capturer", {public = true})
         add_includedirs("deps/submodules/minirtc/src/api", {public = true})
         if is_os("windows") then
+            add_deps("privacy")
             add_packages("libyuv")
             add_files("apps/desktop/src/screen_capturer/captured_nv12_frame.cpp")
             add_files("apps/desktop/src/platform/windows/screen_capturer/screen_capturer_dxgi.cpp",
@@ -318,7 +346,7 @@ function setup_targets()
         add_deps("rd_log", "common", "assets", "config_center", "minirtc",
             "path_manager", "screen_capturer", "speaker_capturer",
             "device_controller", "thumbnail", "version_checker", "tools",
-            "crossdesk_wire")
+            "crossdesk_wire", "privacy")
         add_files("apps/desktop/src/gui/render.cpp", "apps/desktop/src/gui/application/gui_application.cpp",
             "apps/desktop/src/gui/rendering/*.cpp",
             "apps/desktop/src/gui/runtime/*.cpp",

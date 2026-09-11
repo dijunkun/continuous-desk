@@ -351,6 +351,10 @@ int ScreenCapturerWgc::ResetToInitialMonitor() {
 }
 void ScreenCapturerWgc::OnFrame(const WgcSession::wgc_session_frame& frame,
                                 int id) {
+  if (!frame.data && frame.width == 0 && frame.height == 0) {
+    if (on_data_) on_data_(nullptr, ScreenCapturer::kBackendReset, 0, 0, "", nullptr);
+    return;
+  }
   if (!running_ || !on_data_) {
     return;
   }

@@ -3,6 +3,13 @@
 namespace crossdesk {
 
 void GuiRuntime::ResetRemoteServiceStatus(RemoteSession& props) {
+  {
+    std::lock_guard lock(props.privacy_status_mutex_);
+    props.privacy_status_ = {};
+    props.privacy_status_received_ = false;
+    props.privacy_command_pending_ = false;
+    props.privacy_status_tick_ = 0;
+  }
   props.remote_service_status_received_ = false;
   props.remote_service_available_ = false;
   props.remote_interactive_stage_.clear();

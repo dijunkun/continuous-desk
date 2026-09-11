@@ -25,6 +25,16 @@ constexpr auto kPresenceRefreshInterval = std::chrono::seconds(30);
 constexpr auto kPresenceRetryInterval = std::chrono::seconds(1);
 }  // namespace
 
+bool GuiRuntime::HasActiveSession() {
+  if (stream_window_inited_) return true;
+  std::shared_lock lock(connection_status_mutex_);
+  return std::any_of(connection_status_.begin(), connection_status_.end(),
+                     [](const auto& entry) {
+                       return entry.second == ConnectionStatus::Connecting ||
+                              entry.second == ConnectionStatus::Connected;
+                     });
+}
+
 void GuiRuntime::HandleConnectionStatusChange() {
   if (!signal_connected_ || !peer_) {
     return;
@@ -121,6 +131,9 @@ void GuiRuntime::HandlePresenceProbeTimeout() {
 void GuiRuntime::HandleServerControllerDisconnected(
     const std::string& remote_id, const char* reason) {
   keyboard_.ReleaseRemotePressedKeys(remote_id, reason);
+#ifdef _WIN32
+  devices_.ReleaseRemoteMouseButtons();
+#endif
   {
     std::lock_guard lock(remote_pointer_input_mutex_);
     last_remote_pointer_input_time_.erase(remote_id);
@@ -150,6 +163,10 @@ void GuiRuntime::HandleServerControllerDisconnected(
     remote_client_id_ = remaining_controller_id;
     return;
   }
+
+  LOG_INFO("Last remote controller disconnected; recovering privacy, reason={}",
+           reason ? reason : "unknown");
+  privacy_.Disconnected();
 
   need_to_create_server_window_.store(false, std::memory_order_release);
   need_to_destroy_server_window_.store(true, std::memory_order_release);

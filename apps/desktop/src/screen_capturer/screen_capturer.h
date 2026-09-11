@@ -16,6 +16,9 @@ namespace crossdesk {
 
 class ScreenCapturer {
  public:
+  // Windows backends emit a control-only callback BEFORE automatic recovery.
+  // No video buffer accompanies this notification; wrappers must consume it.
+  static constexpr int kBackendReset = -1;
   // |stream_id| is a logical MiniRTC stream ID (DisplayN), not a platform
   // display name or physical handle. |native_frame| is borrowed for the
   // duration of the callback; retain its owner before using it asynchronously.

@@ -88,8 +88,10 @@ installApp:
     ; Bundle service-side binaries required by the Windows service flow
     File "..\..\..\..\build\windows\x64\release\crossdesk_service.exe"
     File "..\..\..\..\build\windows\x64\release\crossdesk_session_helper.exe"
+    File "..\..\..\..\build\windows\x64\release\crossdesk_privacy_cursor_helper.exe"
+    File "..\..\..\..\build\windows\x64\release\crossdesk_privacy_window.dll"
     ; Bundle runtime DLLs from the release output directory
-    File "..\..\..\..\build\windows\x64\release\*.dll"
+    File /x crossdesk_privacy_window.dll "..\..\..\..\build\windows\x64\release\*.dll"
 
     Call RegisterInstalledService
 
@@ -145,6 +147,8 @@ uninstallApp:
     Delete "$INSTDIR\CrossDesk.exe"
     Delete "$INSTDIR\crossdesk_service.exe"
     Delete "$INSTDIR\crossdesk_session_helper.exe"
+    Delete "$INSTDIR\crossdesk_privacy_cursor_helper.exe"
+    Delete "$INSTDIR\crossdesk_privacy_window.dll"
     Delete "$INSTDIR\uninstall.exe"
 
     ; Recursively delete installation directory

@@ -26,6 +26,8 @@ enum ControlType {
   service_command = 6,
   keyboard_state = 7,
   cursor_state = 8,
+  privacy_command = 9,
+  privacy_status = 10,
 };
 
 enum MouseFlag {
@@ -109,6 +111,23 @@ struct ServiceCommand {
   ServiceCommandFlag flag;
 };
 
+enum class PrivacyState { unsupported, off, starting, on, stopping, failed };
+enum class PrivacyCommandFlag { query, enable, disable };
+struct PrivacyCommand {
+  PrivacyCommandFlag flag;
+  bool block_local_input;
+};
+struct PrivacyStatus {
+  PrivacyState state;
+  bool supported;
+  bool input_block_supported;
+  bool overlay_active;
+  bool input_blocked;
+  bool remote_paused;
+  uint32_t revision;
+  char reason[256];
+};
+
 struct RemoteAction {
   ControlType type = ControlType::invalid;
   union {
@@ -121,6 +140,8 @@ struct RemoteAction {
     int d;
     ServiceStatus ss;
     ServiceCommand c;
+    PrivacyCommand pc;
+    PrivacyStatus ps;
   };
 
   std::string to_json() const;
