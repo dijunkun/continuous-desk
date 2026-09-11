@@ -54,6 +54,9 @@ inline int ApplyMainWindowStrings(
   strings.set_language(Text(localization::language[language]));
   strings.set_video_quality(Text(localization::video_quality[language]));
   strings.set_frame_rate(Text(localization::video_frame_rate[language]));
+  strings.set_capture_method(Text(localization::screen_capture_method[language]));
+  strings.set_capture_method_auto(
+      Text(localization::screen_capture_method_auto[language]));
   strings.set_adaptation_policy(
       Text(localization::video_adaptation_policy[language]));
   strings.set_priority_frame_rate(

@@ -298,7 +298,8 @@ function setup_targets()
         set_kind("object")
         add_deps("rd_log", "autostart")
         add_files("apps/desktop/src/config_center/*.cpp")
-        add_includedirs("apps/desktop/src/config_center", {public = true})
+        add_includedirs("apps/desktop/src", "apps/desktop/src/config_center",
+            {public = true})
 
     target("assets")
         set_kind("headeronly")

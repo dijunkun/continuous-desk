@@ -127,6 +127,9 @@ struct TranslationRow {
     u8"стола")                                                                 \
   X(settings, u8"设置", "Settings", u8"Настройки")                             \
   X(language, u8"语言:", "Language:", u8"Язык:")                               \
+  X(screen_capture_method, u8"采集方式:", "Capture Method:",                  \
+    u8"Способ захвата:")                                                      \
+  X(screen_capture_method_auto, u8"自动", "Auto", u8"Авто")                 \
   X(video_quality, u8"画面质量:", "Video Quality:", u8"Качество видео:")       \
   X(video_frame_rate, u8"画面采集帧率:",                                       \
     "Video Capture Frame Rate:", u8"Частота захвата видео:")                   \

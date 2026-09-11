@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "screen_capturer.h"
+#include "screen_capture_method.h"
 #include "privacy_controller.h"
 
 namespace crossdesk {
@@ -45,9 +46,16 @@ class ScreenCapturerWin : public ScreenCapturer {
 
   std::vector<DisplayInfo> GetDisplayInfoList() override;
   void SetPrivacyController(PrivacyController* privacy) { privacy_ = privacy; }
+  // Set before Init(), while capture is stopped.
+  void SetCaptureMethod(ScreenCaptureMethod method) { capture_method_ = method; }
 
  private:
   std::unique_ptr<ScreenCapturer> impl_;
+  ScreenCaptureMethod capture_method_ = ScreenCaptureMethod::Auto;
+  bool IsBackendEnabled(ScreenCaptureMethod method) const {
+    return capture_method_ == ScreenCaptureMethod::Auto ||
+           capture_method_ == method;
+  }
   PrivacyController* privacy_ = nullptr;
   void NotifyPrivacyCapture(bool running);
   int fps_ = 60;

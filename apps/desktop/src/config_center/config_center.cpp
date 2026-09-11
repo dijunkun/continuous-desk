@@ -58,6 +58,14 @@ int ConfigCenter::Load() {
   video_frame_rate_ = static_cast<VIDEO_FRAME_RATE>(ini_.GetLongValue(
       section_, "video_frame_rate", static_cast<long>(video_frame_rate_)));
 
+  const long screen_capture_method_value = ini_.GetLongValue(
+      section_, "screen_capture_method",
+      static_cast<long>(ScreenCaptureMethod::Auto));
+  screen_capture_method_ = IsValidScreenCaptureMethod(screen_capture_method_value)
+                               ? static_cast<ScreenCaptureMethod>(
+                                     screen_capture_method_value)
+                               : ScreenCaptureMethod::Auto;
+
   const long video_adaptation_policy_value = ini_.GetLongValue(
       section_, "video_adaptation_policy",
       static_cast<long>(video_adaptation_policy_));
@@ -147,6 +155,8 @@ int ConfigCenter::Save() {
                     static_cast<long>(video_quality_));
   ini_.SetLongValue(section_, "video_frame_rate",
                     static_cast<long>(video_frame_rate_));
+  ini_.SetLongValue(section_, "screen_capture_method",
+                    static_cast<long>(screen_capture_method_));
   ini_.SetLongValue(section_, "video_adaptation_policy",
                     static_cast<long>(video_adaptation_policy_));
   ini_.SetLongValue(section_, "video_encode_format",
@@ -214,6 +224,20 @@ int ConfigCenter::SetVideoFrameRate(VIDEO_FRAME_RATE video_frame_rate) {
   if (rc < 0) {
     return -1;
   }
+  return 0;
+}
+
+int ConfigCenter::SetScreenCaptureMethod(ScreenCaptureMethod method) {
+  if (!IsValidScreenCaptureMethod(static_cast<long>(method))) {
+    return -1;
+  }
+  ini_.SetLongValue(section_, "screen_capture_method", static_cast<long>(method));
+  if (ini_.SaveFile(config_path_.c_str()) < 0) {
+    ini_.SetLongValue(section_, "screen_capture_method",
+                      static_cast<long>(screen_capture_method_));
+    return -1;
+  }
+  screen_capture_method_ = method;
   return 0;
 }
 
@@ -411,6 +435,10 @@ ConfigCenter::VIDEO_QUALITY ConfigCenter::GetVideoQuality() const {
 
 ConfigCenter::VIDEO_FRAME_RATE ConfigCenter::GetVideoFrameRate() const {
   return video_frame_rate_;
+}
+
+ScreenCaptureMethod ConfigCenter::GetScreenCaptureMethod() const {
+  return screen_capture_method_;
 }
 
 ConfigCenter::VIDEO_ADAPTATION_POLICY

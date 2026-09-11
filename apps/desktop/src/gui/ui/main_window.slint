@@ -39,6 +39,8 @@ export global UiStrings {
     in-out property <string> language: "Language";
     in-out property <string> video-quality: "Video quality";
     in-out property <string> frame-rate: "Frame rate";
+    in-out property <string> capture-method: "Capture method";
+    in-out property <string> capture-method-auto: "Auto";
     in-out property <string> adaptation-policy: "Video preference";
     in-out property <string> priority-frame-rate: "Frame rate";
     in-out property <string> priority-quality: "Quality";
@@ -239,6 +241,8 @@ export component MainWindow inherits Window {
     in-out property <int> language-index: 0;
     in-out property <int> video-quality-index: 2;
     in-out property <int> frame-rate-index: 1;
+    in property <bool> capture-method-visible: false;
+    in-out property <int> capture-method-index: 0;
     in-out property <int> adaptation-policy-index: 1;
     in-out property <int> codec-index: 0;
     in-out property <bool> hardware-codec-enabled: true;
@@ -1447,6 +1451,11 @@ export component MainWindow inherits Window {
                         height: 30px;
                         Text { x: 8px; y: 3px; width: root.compact-language ? 94px : 162px; height: 24px; text: UiStrings.language; font-size: ImGuiFontStyle.body; overflow: elide; vertical-alignment: center; }
                         CompactComboBox { x: root.compact-language ? 106px : 174px; y: 2px; model: ["中文", "English", "Русский"]; current-index <=> root.language-index; }
+                    }
+                    if root.capture-method-visible: Rectangle {
+                        height: 30px;
+                        Text { x: 8px; y: 3px; width: root.compact-language ? 94px : 162px; height: 24px; text: UiStrings.capture-method; font-size: ImGuiFontStyle.body; overflow: elide; vertical-alignment: center; }
+                        CompactComboBox { x: root.compact-language ? 106px : 174px; y: 2px; enabled: !root.settings-session-active; model: [UiStrings.capture-method-auto, "DXGI", "WGC", "GDI"]; current-index <=> root.capture-method-index; }
                     }
                     if root.privacy-setting-visible: Rectangle {
                         height: 30px;

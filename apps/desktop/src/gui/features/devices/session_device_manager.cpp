@@ -78,11 +78,13 @@ int SessionDeviceManager::InitializeScreenCapturer() {
   if (!screen_capturer_) {
     screen_capturer_ =
         static_cast<ScreenCapturer *>(screen_capturer_factory_->Create());
-#ifdef _WIN32
-    if (auto windows = dynamic_cast<ScreenCapturerWin*>(screen_capturer_))
-      windows->SetPrivacyController(&owner_.privacy_);
-#endif
   }
+#ifdef _WIN32
+  if (auto windows = dynamic_cast<ScreenCapturerWin*>(screen_capturer_)) {
+    windows->SetPrivacyController(&owner_.privacy_);
+    windows->SetCaptureMethod(owner_.config_center_->GetScreenCaptureMethod());
+  }
+#endif
 
   last_frame_time_ = {};
   next_frame_deadline_ = {};

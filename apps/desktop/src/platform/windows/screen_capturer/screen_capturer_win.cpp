@@ -439,9 +439,12 @@ int ScreenCapturerWin::Init(const int fps, cb_desktop_data cb) {
     return true;
   };
   // Short-circuiting also keeps the unused WGC plugin unloaded.
-  if (try_init(std::make_unique<ScreenCapturerDxgi>()) ||
-      try_init(WgcPluginCapturer::Create()) ||
-      try_init(std::make_unique<ScreenCapturerGdi>())) {
+  if ((IsBackendEnabled(ScreenCaptureMethod::Dxgi) &&
+       try_init(std::make_unique<ScreenCapturerDxgi>())) ||
+      (IsBackendEnabled(ScreenCaptureMethod::Wgc) &&
+       try_init(WgcPluginCapturer::Create())) ||
+      (IsBackendEnabled(ScreenCaptureMethod::Gdi) &&
+       try_init(std::make_unique<ScreenCapturerGdi>()))) {
     LOG_INFO("Windows capturer: using {}", CaptureBackendName(impl_.get()));
     BuildCanonicalFromImpl();
     monitor_index_.store(0, std::memory_order_relaxed);
@@ -449,7 +452,8 @@ int ScreenCapturerWin::Init(const int fps, cb_desktop_data cb) {
     return 0;
   }
 
-  LOG_ERROR("Windows capturer: all implementations failed, ret={}", ret);
+  LOG_ERROR("Windows capturer: selected capture method {} failed, ret={}",
+            static_cast<int>(capture_method_), ret);
   return -1;
 }
 
@@ -576,6 +580,11 @@ int ScreenCapturerWin::Start(bool show_cursor) {
     }
   }
   if (ret != 0) {
+    if (capture_method_ != ScreenCaptureMethod::Auto) {
+      LOG_ERROR("Windows capturer: selected backend {} failed to start (ret={})",
+                CaptureBackendName(impl_.get()), ret);
+      return ret;
+    }
     LOG_WARN("Windows capturer: refresh/start failed (ret={}), trying fallback",
              ret);
 
@@ -799,10 +808,12 @@ bool ScreenCapturerWin::RestartCaptureBackendAfterSecureDesktop() {
     return true;
   }
 
-  if (TryStartBackend(std::make_unique<ScreenCapturerDxgi>(),
-                      current_monitor) ||
-      TryStartBackend(WgcPluginCapturer::Create(), current_monitor) ||
-      TryStartBackend(std::make_unique<ScreenCapturerGdi>(), current_monitor)) {
+  if ((IsBackendEnabled(ScreenCaptureMethod::Dxgi) &&
+       TryStartBackend(std::make_unique<ScreenCapturerDxgi>(), current_monitor)) ||
+      (IsBackendEnabled(ScreenCaptureMethod::Wgc) &&
+       TryStartBackend(WgcPluginCapturer::Create(), current_monitor)) ||
+      (IsBackendEnabled(ScreenCaptureMethod::Gdi) &&
+       TryStartBackend(std::make_unique<ScreenCapturerGdi>(), current_monitor))) {
     return true;
   }
 

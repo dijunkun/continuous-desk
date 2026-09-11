@@ -1231,6 +1231,9 @@ void GuiApplication::ResetSettingsUi() {
   ui_->main->set_autostart_enabled(enable_autostart_);
   ui_->main->set_daemon_enabled(enable_daemon_);
 #ifdef _WIN32
+  ui_->main->set_capture_method_visible(true);
+  ui_->main->set_capture_method_index(
+      static_cast<int>(config_center_->GetScreenCaptureMethod()));
   ui_->main->set_privacy_setting_visible(true);
   ui_->main->set_privacy_on_connect_enabled(
       config_center_->IsEnablePrivacyScreen());
@@ -3008,6 +3011,15 @@ void GuiApplication::SaveSettingsFromUi() {
   config_center_->SetAutostart(enable_autostart_);
   config_center_->SetDaemon(enable_daemon_);
 #ifdef _WIN32
+  if (!HasActiveSession()) {
+    const auto capture_method = static_cast<ScreenCaptureMethod>(
+        std::clamp(main->get_capture_method_index(), 0, 3));
+    if (config_center_->SetScreenCaptureMethod(capture_method) != 0) {
+      LOG_ERROR("Failed to save screen capture method");
+    }
+  }
+  main->set_capture_method_index(
+      static_cast<int>(config_center_->GetScreenCaptureMethod()));
   if (config_center_->SetPrivacyScreen(main->get_privacy_on_connect_enabled()) !=
       0) {
     main->set_privacy_on_connect_enabled(
