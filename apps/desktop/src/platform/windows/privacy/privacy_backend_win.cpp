@@ -21,6 +21,7 @@
 #include "privacy_input_guard.h"
 #include "privacy_probe_pattern.h"
 #include "privacy_probe_renderer.h"
+#include "privacy_window_visibility.h"
 #include "rd_log.h"
 
 #ifndef WDA_EXCLUDEFROMCAPTURE
@@ -379,6 +380,7 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
           continue;
         if (GetWindowRect(above, &bounds) &&
             IntersectRect(&intersection, &bounds, &w.rect)) {
+          if (IsNonObstructingPrivacyWindow(above, bounds)) continue;
           char window_class[128]{};
           DWORD process_id = 0;
           GetClassNameA(above, window_class, sizeof(window_class));
@@ -387,16 +389,19 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
           if (above != last_obstruction_ ||
               now - last_obstruction_log_ >= 1000) {
             LOG_WARN(
-                "Privacy cover obstructed: class={}, process={}; "
+                "Potential privacy cover overlap: class={}, process={}, "
+                "band={}, bounds=({}, {})-({}, {}), exstyle=0x{:x}; "
                 "remote operation paused",
-                window_class, process_id);
+                window_class, process_id, above_band, bounds.left, bounds.top,
+                bounds.right, bounds.bottom,
+                GetWindowLongPtrW(above, GWL_EXSTYLE));
             last_obstruction_ = above;
             last_obstruction_log_ = now;
           }
-          // A higher-band/system window cannot be repaired by raising an
-          // ordinary cover. Retain protection and require explicit recovery.
+          // HWND order cannot prove compositor order, but this window may
+          // display content. Retain protection and require explicit recovery.
           return {
-              "A system or higher-band window overrides privacy coverage; "
+              "A visible window may overlap privacy coverage; "
               "remote operation paused. Turn privacy off to recover.",
               false};
         }
