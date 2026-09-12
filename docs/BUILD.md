@@ -11,7 +11,7 @@
 
 ## Windows
 
-安装 Visual Studio 2022 的“使用 C++ 的桌面开发”工作负载及 Windows SDK，并安装 Xmake。在开发者 PowerShell 中执行：
+安装 Visual Studio 2022 的“使用 C++ 的桌面开发”工作负载、Windows SDK 和“适用于 Windows 的 C++ Clang 编译器”组件，并安装 Xmake。Windows x64 的 libyuv 使用 clang-cl 编译，以启用 SIMD 图像转换和缩放；主程序仍使用 MSVC。在开发者 PowerShell 中执行：
 
 ```powershell
 git clone --recurse-submodules https://github.com/kunkundi/crossdesk.git
@@ -20,6 +20,8 @@ xmake f -c -p windows -a x64 -m release --CROSSDESK_VERSION=1.4.3 --USE_CUDA=fal
 xmake b -vy crossdesk
 xmake r crossdesk
 ```
+
+性能复测应使用 `release`；`debug` 保留调试信息并关闭主程序编译优化。
 
 安装包还使用 NSIS，需将仓库中的 [nsProcess.dll](../apps/desktop/scripts/windows/nsProcess.dll) 放入 NSIS 的 `Plugins/x86-unicode` 目录，并确保 `makensis` 在 `PATH` 中。完成 Release 编译后运行：
 

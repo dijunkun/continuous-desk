@@ -11,7 +11,7 @@ After cloning, run build and packaging commands from the repository root. The [X
 
 ## Windows
 
-Install Visual Studio 2022 with the **Desktop development with C++** workload and Windows SDK, plus Xmake. In a developer PowerShell, run:
+Install Visual Studio 2022 with the **Desktop development with C++** workload, Windows SDK, and **C++ Clang Compiler for Windows** component, plus Xmake. Windows x64 builds use clang-cl for libyuv to enable SIMD conversion and scaling; the application still uses MSVC. In a developer PowerShell, run:
 
 ```powershell
 git clone --recurse-submodules https://github.com/kunkundi/crossdesk.git
@@ -20,6 +20,8 @@ xmake f -c -p windows -a x64 -m release --CROSSDESK_VERSION=1.4.3 --USE_CUDA=fal
 xmake b -vy crossdesk
 xmake r crossdesk
 ```
+
+Use `release` for performance measurements; `debug` keeps symbols and disables application compiler optimizations.
 
 Installer packaging also uses NSIS. Copy the repository's [nsProcess.dll](../apps/desktop/scripts/windows/nsProcess.dll) into NSIS's `Plugins/x86-unicode` directory and ensure `makensis` is on `PATH`. After building Release, run:
 
