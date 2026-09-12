@@ -65,6 +65,8 @@ class ConfigCenter {
   ScreenCaptureMethod GetScreenCaptureMethod() const;
   VIDEO_ADAPTATION_POLICY GetVideoAdaptationPolicy() const;
   VIDEO_ENCODE_FORMAT GetVideoEncodeFormat() const;
+  // Whether this build includes a hardware video codec backend.
+  static bool IsHardwareVideoCodecAvailable();
   bool IsHardwareVideoCodec() const;
   TURN_MODE GetTurnMode() const;
   bool IsEnableTurn() const;

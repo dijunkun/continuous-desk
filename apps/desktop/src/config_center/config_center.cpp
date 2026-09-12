@@ -450,8 +450,18 @@ ConfigCenter::VIDEO_ENCODE_FORMAT ConfigCenter::GetVideoEncodeFormat() const {
   return video_encode_format_;
 }
 
+bool ConfigCenter::IsHardwareVideoCodecAvailable() {
+#if (((defined(_WIN32) || defined(__linux__)) && !defined(__aarch64__) && \
+      !defined(__arm__) && USE_CUDA) ||                                   \
+     defined(__APPLE__))
+  return true;
+#else
+  return false;
+#endif
+}
+
 bool ConfigCenter::IsHardwareVideoCodec() const {
-  return hardware_video_codec_;
+  return IsHardwareVideoCodecAvailable() && hardware_video_codec_;
 }
 
 ConfigCenter::TURN_MODE ConfigCenter::GetTurnMode() const {

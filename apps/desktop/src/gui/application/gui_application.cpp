@@ -1224,7 +1224,11 @@ void GuiApplication::ResetSettingsUi() {
   ui_->main->set_adaptation_policy_index(
       video_adaptation_policy_button_value_);
   ui_->main->set_codec_index(video_encode_format_button_value_);
-  ui_->main->set_hardware_codec_enabled(enable_hardware_video_codec_);
+  const bool hardware_codec_available =
+      ConfigCenter::IsHardwareVideoCodecAvailable();
+  ui_->main->set_hardware_codec_available(hardware_codec_available);
+  ui_->main->set_hardware_codec_enabled(hardware_codec_available &&
+                                       enable_hardware_video_codec_);
   ui_->main->set_turn_enabled(enable_turn_);
   ui_->main->set_srtp_enabled(enable_srtp_);
   ui_->main->set_self_hosted_enabled(enable_self_hosted_);
@@ -2151,14 +2155,6 @@ void GuiApplication::SyncMainWindow() {
   ui_->main->set_release_name(UiText(release_name_));
   ui_->main->set_release_date(UiText(release_date_));
   ui_->main->set_settings_session_active(HasActiveSession());
-#if (((defined(_WIN32) || defined(__linux__)) && !defined(__aarch64__) && \
-      !defined(__arm__) && USE_CUDA) ||                                   \
-     defined(__APPLE__))
-  ui_->main->set_hardware_codec_available(true);
-#else
-  ui_->main->set_hardware_codec_available(false);
-#endif
-
   if (show_offline_warning_window_) {
     ui_->main->set_offline_warning(UiText(offline_warning_text_));
     show_offline_warning_window_ = false;
@@ -2988,7 +2984,8 @@ void GuiApplication::SaveSettingsFromUi() {
   video_adaptation_policy_button_value_ =
       std::clamp(main->get_adaptation_policy_index(), 0, 2);
   video_encode_format_button_value_ = std::clamp(main->get_codec_index(), 0, 1);
-  enable_hardware_video_codec_ = main->get_hardware_codec_enabled();
+  enable_hardware_video_codec_ = ConfigCenter::IsHardwareVideoCodecAvailable() &&
+                                  main->get_hardware_codec_enabled();
   enable_turn_ = main->get_turn_enabled();
   enable_srtp_ = main->get_srtp_enabled();
   enable_self_hosted_ = main->get_self_hosted_enabled();
