@@ -3,6 +3,30 @@ function setup_targets()
 
     includes("deps/submodules", "deps/thirdparty")
 
+    local crossdesk_version = get_config("CROSSDESK_VERSION") or "0.0.0"
+    local version_define = "CROSSDESK_VERSION=\"" .. crossdesk_version .. "\""
+    local windows_resource_defines = {
+        "CROSSDESK_VERSION_STRING=\"" .. crossdesk_version .. "\""
+    }
+    local version_base = crossdesk_version:gsub("^v", ""):match("^(%d[%d%.]*)") or "0.0.0"
+    local version_parts = {}
+    for part in version_base:gmatch("%d+") do
+        local value = tonumber(part) or 0
+        table.insert(version_parts, value <= 65535 and value or 0)
+        if #version_parts == 4 then
+            break
+        end
+    end
+    while #version_parts < 4 do
+        table.insert(version_parts, 0)
+    end
+    table.insert(windows_resource_defines,
+        "CROSSDESK_VERSION_NUMERIC=" .. table.concat(version_parts, ","))
+    local windows_helper_resource_defines = table.join(windows_resource_defines)
+    if is_config("CROSSDESK_PORTABLE", true) then
+        table.insert(windows_helper_resource_defines, "CROSSDESK_PORTABLE=1")
+    end
+
     local function copy_slint_runtime(target)
         if not target:is_plat("windows") then
             return
@@ -50,6 +74,9 @@ function setup_targets()
 
     target("path_manager")
         set_kind("object")
+        if is_config("CROSSDESK_PORTABLE", true) then
+            add_defines("CROSSDESK_PORTABLE=1")
+        end
         add_deps("rd_log")
         add_files("apps/desktop/src/path_manager/*.cpp")
         if is_os("windows") then
@@ -182,7 +209,8 @@ function setup_targets()
             set_runtimes("MT")
             add_files("apps/desktop/src/platform/windows/privacy/band_module/main.cpp")
             add_files("apps/desktop/src/platform/windows/privacy/band_module/privacy_cover_renderer.cpp")
-            add_files("apps/desktop/resources/windows/crossdesk_privacy_window.rc")
+            add_files("apps/desktop/resources/windows/crossdesk_privacy_window.rc",
+                {defines = windows_resource_defines})
             add_syslinks("user32", "gdi32", "dwmapi")
 
         target("crossdesk_privacy_cursor_helper")
@@ -321,7 +349,6 @@ function setup_targets()
     target("version_checker")
         set_kind("object")
         add_packages("cpp-httplib")
-        add_defines("CROSSDESK_VERSION=\"" .. (get_config("CROSSDESK_VERSION") or "Unknown") .. "\"")
         add_deps("rd_log")
         add_files("apps/desktop/src/version_checker/*.cpp")
         add_includedirs("apps/desktop/src/version_checker", {public = true})
@@ -353,7 +380,11 @@ function setup_targets()
         add_packages("slint", {public = true})
         add_packages("libyuv", "tinyfiledialogs")
         add_rules("slint")
-        add_defines("CROSSDESK_VERSION=\"" .. (get_config("CROSSDESK_VERSION") or "Unknown") .. "\"")
+        if is_config("CROSSDESK_PORTABLE", true) then
+            -- RuntimeState changes layout in portable builds. Consumers of GUI
+            -- headers must see the same definition, without affecting its deps.
+            add_defines("CROSSDESK_PORTABLE=1", {public = true})
+        end
         add_deps("rd_log", "common", "assets", "config_center", "minirtc",
             "path_manager", "screen_capturer", "speaker_capturer",
             "device_controller", "thumbnail", "version_checker", "tools",
@@ -365,6 +396,11 @@ function setup_targets()
             "apps/desktop/src/gui/features/devices/*.cpp", "apps/desktop/src/gui/features/input/*.cpp",
             "apps/desktop/src/gui/features/clipboard/*.cpp", "apps/desktop/src/gui/features/file_transfer/*.cpp",
             "apps/desktop/src/gui/features/settings/*.cpp", "apps/desktop/src/gui/ui/crossdesk_ui.slint")
+        -- Only these translation units consume the application version. Keep
+        -- version changes out of the flags for media and the rest of the GUI.
+        add_files("apps/desktop/src/gui/application/gui_application.cpp",
+            "apps/desktop/src/gui/runtime/peer_event_handler.cpp",
+            {defines = version_define})
         add_includedirs("apps/desktop/src", "apps/desktop/src/gui", {public = true})
         add_includedirs("apps/desktop/src/platform/common/input")
         if is_os("windows") then
@@ -416,7 +452,8 @@ function setup_targets()
             add_files("apps/desktop/src/platform/windows/screen_capturer/screen_capturer_wgc.cpp",
                 "apps/desktop/src/platform/windows/screen_capturer/wgc_session_impl.cpp",
                 "apps/desktop/src/platform/windows/screen_capturer/wgc_plugin_entry.cpp")
-            add_files("apps/desktop/resources/windows/wgc_plugin.rc")
+            add_files("apps/desktop/resources/windows/wgc_plugin.rc",
+                {defines = windows_resource_defines})
             add_includedirs("apps/desktop/src/common", "apps/desktop/src/screen_capturer",
                 "apps/desktop/src/platform/windows/screen_capturer",
                 "deps/submodules/minirtc/src/api")
@@ -427,7 +464,8 @@ function setup_targets()
             add_links("Advapi32", "Wtsapi32", "Ole32", "Userenv")
             add_files("apps/desktop/src/platform/windows/service/main.cpp",
                 "apps/desktop/src/platform/windows/service/service_host.cpp")
-            add_files("apps/desktop/resources/windows/crossdesk_service.rc")
+            add_files("apps/desktop/resources/windows/crossdesk_service.rc",
+                {defines = windows_resource_defines})
             add_includedirs("apps/desktop/src/platform/windows/service")
 
         target("crossdesk_session_helper")
@@ -436,7 +474,8 @@ function setup_targets()
             add_deps("rd_log", "path_manager")
             add_links("Advapi32", "User32", "Wtsapi32", "Gdi32")
             add_files("apps/desktop/src/platform/windows/service/session_helper_main.cpp")
-            add_files("apps/desktop/resources/windows/crossdesk_session_helper.rc")
+            add_files("apps/desktop/resources/windows/crossdesk_session_helper.rc",
+                {defines = windows_helper_resource_defines})
             add_includedirs("apps/desktop/src/common",
                 "apps/desktop/src/platform/windows/service")
             add_includedirs("apps/desktop/src/platform/windows/input")
@@ -453,7 +492,7 @@ function setup_targets()
             add_includedirs("apps/desktop/src/platform/windows/service")
             add_links("Advapi32", "Wtsapi32", "Ole32", "Userenv")
             add_deps("wgc_plugin", "crossdesk_service", "crossdesk_session_helper")
-            add_files(crossdesk_windows_resource)
+            add_files(crossdesk_windows_resource, {defines = windows_resource_defines})
         elseif is_os("macosx") then
             add_files("apps/desktop/src/platform/common/posix_daemon_backend.cpp",
                 "apps/desktop/src/platform/macos/daemon_backend.cpp")

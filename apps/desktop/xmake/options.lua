@@ -29,30 +29,6 @@ function setup_options_and_dependencies()
         set_description("Build CrossDesk as a portable package that stores data beside the executable")
     option_end()
 
-    -- Preserve the existing codebase/toolchain contract. Slint targets opt in to
-    -- C++20 locally because its generated C++ API requires it.
-    local crossdesk_version = get_config("CROSSDESK_VERSION") or "0.0.0"
-    local version_base = crossdesk_version:gsub("^v", ""):match("^(%d[%d%.]*)") or "0.0.0"
-    local version_parts = {}
-    for part in version_base:gmatch("%d+") do
-        local value = tonumber(part) or 0
-        if value > 65535 then
-            value = 0
-        end
-        table.insert(version_parts, value)
-        if #version_parts == 4 then
-            break
-        end
-    end
-    while #version_parts < 4 do
-        table.insert(version_parts, 0)
-    end
-
-    add_defines("CROSSDESK_VERSION_STRING=\"" .. crossdesk_version .. "\"")
-    if is_os("windows") then
-        add_defines("CROSSDESK_VERSION_NUMERIC=" .. table.concat(version_parts, ","))
-    end
-
     -- set_policy("build.warning", true)
     -- set_warnings("all", "extra")
     -- add_cxxflags("/W4", "/WX")
@@ -61,10 +37,6 @@ function setup_options_and_dependencies()
     add_defines("USE_CUDA=" .. (is_config("USE_CUDA", true) and "1" or "0"))
     add_defines("USE_WAYLAND=" .. (is_config("USE_WAYLAND", true) and "1" or "0"))
     add_defines("USE_DRM=" .. (is_config("USE_DRM", true) and "1" or "0"))
-    if is_config("CROSSDESK_PORTABLE", true) then
-        add_defines("CROSSDESK_PORTABLE=1")
-    end
-
     if is_mode("debug") then
         add_defines("CROSSDESK_DEBUG")
     end
