@@ -87,7 +87,7 @@ if [[ ! -x "$BUILD_BINARY" ]]; then
     exit 1
 fi
 
-for command_name in readelf ldd dpkg-deb; do
+for command_name in readelf ldd dpkg-deb strip; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
         echo "Required packaging command is missing: $command_name" >&2
         exit 1
@@ -128,6 +128,9 @@ if [[ -n "$SLINT_NEEDED" ]]; then
         exit 1
     fi
     install -m 0755 "$SLINT_LIBRARY" "$PRIVATE_DIR/$SLINT_NEEDED"
+    # Keep dynamic exports/relocations while removing unneeded symbols from the
+    # staged copy. Never strip Xmake's cached runtime in place.
+    strip --strip-unneeded "$PRIVATE_DIR/$SLINT_NEEDED"
 fi
 
 cat > "$BIN_DIR/$PKG_NAME" <<'EOF'

@@ -11,7 +11,7 @@ EXPECTED_ARCH="$2"
 APP_EXECUTABLE="$APP_BUNDLE/Contents/MacOS/CrossDesk"
 FRAMEWORKS_DIR="$APP_BUNDLE/Contents/Frameworks"
 
-for command_name in codesign install_name_tool lipo otool; do
+for command_name in codesign install_name_tool lipo otool strip; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
         echo "Required bundling command is missing: $command_name" >&2
         exit 1
@@ -123,7 +123,11 @@ if ! otool -l "$APP_EXECUTABLE" | awk '
     install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_EXECUTABLE"
 fi
 
-# install_name_tool invalidates the linker's ad-hoc signature. Sign nested code
+# Strip only the staged runtime, retaining exported symbols for Slint's C ABI.
+# The package cache remains intact for debugging and other consumers.
+strip -S -x "$FRAMEWORKS_DIR/$SLINT_NAME"
+
+# install_name_tool and strip invalidate the linker's ad-hoc signature. Sign nested code
 # first, then seal the complete app bundle so local packages remain launchable.
 codesign --force --sign - "$FRAMEWORKS_DIR/$SLINT_NAME"
 codesign --force --deep --sign - "$APP_BUNDLE"
