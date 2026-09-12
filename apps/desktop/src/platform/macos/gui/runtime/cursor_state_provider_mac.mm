@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "runtime/cursor_position.h"
+#include "../../privacy/privacy_cursor_mac.h"
 
 namespace crossdesk {
 namespace {
@@ -161,7 +162,9 @@ bool CursorStateProvider::Sample(const std::vector<DisplayInfo>& displays,
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
   NSCursor* cursor = NSCursor.currentSystemCursor;
-  const bool visible = CGCursorIsVisible();
+  const bool privacy_hidden = IsMacPrivacyCursorHidden();
+  const bool visible = CGCursorIsVisible() || privacy_hidden;
+  if (!cursor && privacy_hidden) cursor = NSCursor.arrowCursor;
 #pragma clang diagnostic pop
 
   state->seq = 0;

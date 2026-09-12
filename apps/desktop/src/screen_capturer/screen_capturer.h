@@ -14,6 +14,8 @@
 
 namespace crossdesk {
 
+class PrivacyController;
+
 class ScreenCapturer {
  public:
   // Windows backends emit a control-only callback BEFORE automatic recovery.
@@ -32,6 +34,7 @@ class ScreenCapturer {
 
  public:
   virtual int Init(const int fps, cb_desktop_data cb) = 0;
+  virtual void SetPrivacyController(PrivacyController*) {}
   virtual int Destroy() = 0;
   virtual int Start(bool show_cursor) = 0;
   virtual int Stop() = 0;

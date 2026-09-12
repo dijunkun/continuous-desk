@@ -405,14 +405,14 @@ void PeerEventHandler::OnConnectionStatus(ConnectionStatus status,
     runtime->show_connection_status_window_ = true;
     {
       std::unique_lock lock(runtime->connection_status_mutex_);
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__APPLE__)
       if (status == ConnectionStatus::Connected &&
           runtime->config_center_->IsEnablePrivacyScreen() &&
           std::none_of(runtime->connection_status_.begin(),
                        runtime->connection_status_.end(), [](const auto& entry) {
                          return entry.second == ConnectionStatus::Connected;
                        })) {
-        // Pause before Connected becomes observable by capture/input threads.
+        // Request optional privacy without delaying connection or capture.
         // Only the first controller takes over local input. A later join must
         // not release an existing controller's keys or re-enable privacy that
         // the current session explicitly turned off.

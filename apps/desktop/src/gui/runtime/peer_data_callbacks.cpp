@@ -88,8 +88,6 @@ void PeerEventHandler::OnReceiveDataBuffer(
   }
 
   std::string source_id = std::string(src_id, src_id_size);
-  if (!runtime->privacy_.RemoteAllowed() &&
-      (source_id == runtime->clipboard_label_ || source_id == runtime->file_label_)) return;
   if (source_id == runtime->file_label_) {
     std::string remote_user_id = std::string(user_id, user_id_size);
 
@@ -185,11 +183,9 @@ void PeerEventHandler::OnReceiveDataBuffer(
                                 remote_action.type == ControlType::keyboard_state;
     if (!keyboard_input && runtime->privacy_.Engaged() &&
         !IsWindowsPrivacyDesktopAvailable()) {
-      runtime->privacy_.Fail("Secure desktop or lock screen; privacy cannot cover system security UI. Remote input paused.");
-      return;
+      runtime->privacy_.Fail("Secure desktop or lock screen; privacy screen will turn off");
     }
 #endif
-    if (!runtime->privacy_.RemoteAllowed()) return;
   }
   if (remote_action.type == ControlType::service_status) {
     if (auto props = runtime->FindRemoteSession(remote_id)) {
@@ -200,8 +196,7 @@ void PeerEventHandler::OnReceiveDataBuffer(
 
   if (remote_action.type == ControlType::service_command) {
     if (runtime->privacy_.Engaged()) {
-      runtime->privacy_.Fail("Security shortcuts require leaving privacy mode; remote operation paused. Turn privacy off first.");
-      return;
+      runtime->privacy_.Fail("Security shortcut requested; privacy screen will turn off");
     }
 #if _WIN32
     if (remote_action.c.flag == ServiceCommandFlag::send_sas) {
@@ -306,7 +301,7 @@ void PeerEventHandler::OnReceiveDataBuffer(
           std::chrono::steady_clock::now();
     }
 #if _WIN32
-    if (!runtime->privacy_.Engaged() && runtime->local_service_status_received_ &&
+    if (runtime->local_service_status_received_ &&
         IsSecureDesktopInteractionRequired(runtime->local_interactive_stage_) &&
         remote_action.type != ControlType::keyboard &&
         remote_action.type != ControlType::keyboard_state) {

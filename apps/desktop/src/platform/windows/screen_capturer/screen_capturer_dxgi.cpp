@@ -330,8 +330,7 @@ void ScreenCapturerDxgi::CaptureLoop() {
         timeout_ms, &frame_info, desktop_resource.GetAddressOf());
     if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
       // DXGI explicitly reports an unchanged desktop. Re-emit only a frame
-      // successfully acquired for this monitor, so a static screen still has
-      // a delivery heartbeat after temporary privacy probes are removed.
+      // successfully acquired for this monitor to keep delivering static frames.
       if (cached_frame_valid && cached_generation == duplication_generation_ &&
           cached_monitor == monitor_index_.load() && callback_ && nv12_frame_) {
         const auto stream_id = MakeDisplayStreamId(cached_monitor);
@@ -342,7 +341,7 @@ void ScreenCapturerDxgi::CaptureLoop() {
       continue;
     }
     // Never replay a cached image after an acquisition/conversion failure or
-    // a backend rebuild. Normal error/reset handling must pause privacy.
+    // a backend rebuild. Normal error/reset handling releases optional privacy.
     cached_frame_valid = false;
     if (FAILED(hr)) {
       LOG_ERROR("DXGI: AcquireNextFrame failed, hr={}", (int)hr);

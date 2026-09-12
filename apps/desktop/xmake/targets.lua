@@ -167,6 +167,10 @@ function setup_targets()
             add_deps("crossdesk_privacy_window", {inherit = false})
             add_includedirs("apps/desktop/src/platform/windows/input")
             add_syslinks("Wtsapi32", "Ole32", {public = true})
+        elseif is_os("macosx") then
+            add_files("apps/desktop/src/platform/macos/privacy/*.mm")
+            add_mxxflags("-fobjc-arc")
+            add_frameworks("AppKit", "ApplicationServices", {public = true})
         end
 
     if is_os("windows") then
@@ -199,6 +203,8 @@ function setup_targets()
             add_includedirs("apps/desktop/src/platform/windows/screen_capturer",
                 "apps/desktop/src/platform/windows/service")
         elseif is_os("macosx") then
+            add_deps("privacy")
+            add_mxxflags("-fobjc-arc")
             add_files("apps/desktop/src/platform/macos/screen_capturer/*.cpp",
                 "apps/desktop/src/platform/macos/screen_capturer/*.mm")
             add_includedirs("apps/desktop/src/platform/macos/screen_capturer")

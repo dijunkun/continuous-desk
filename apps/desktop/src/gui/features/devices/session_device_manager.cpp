@@ -32,7 +32,7 @@ SessionDeviceManager::SessionDeviceManager(GuiRuntime &owner)
                 SpeakerCapturerFactory().Create());
           },
           [this](unsigned char *data, size_t size, const char *) {
-            if (!owner_.peer_ || !owner_.privacy_.RemoteAllowed()) return;
+            if (!owner_.peer_) return;
             MiniRtcAudioFrame frame{};
             frame.data = reinterpret_cast<const char *>(data);
             frame.size = size;
@@ -79,9 +79,9 @@ int SessionDeviceManager::InitializeScreenCapturer() {
     screen_capturer_ =
         static_cast<ScreenCapturer *>(screen_capturer_factory_->Create());
   }
+  screen_capturer_->SetPrivacyController(&owner_.privacy_);
 #ifdef _WIN32
   if (auto windows = dynamic_cast<ScreenCapturerWin*>(screen_capturer_)) {
-    windows->SetPrivacyController(&owner_.privacy_);
     windows->SetCaptureMethod(owner_.config_center_->GetScreenCaptureMethod());
   }
 #endif
@@ -102,7 +102,6 @@ int SessionDeviceManager::InitializeScreenCapturer() {
       fps, [this, fps](unsigned char *data, int size, int width, int height,
                        const char *display_name,
                        const MiniRtcNativeVideoFrame *native_frame) {
-        if (!owner_.privacy_.RemoteAllowed()) return;
         const auto now_time = std::chrono::steady_clock::now();
         if (!ShouldSendCapturedFrame(now_time, fps)) {
           return;
@@ -165,9 +164,6 @@ int SessionDeviceManager::InitializeScreenCapturer() {
         }
 
         MiniRtcVideoFrame frame{};
-        // A new controller can connect after this callback's first gate check
-        // while it is collecting the Connected peer IDs above.
-        if (!owner_.privacy_.RemoteAllowed()) return;
         frame.data = reinterpret_cast<const char *>(data);
         frame.size = size;
         frame.width = width;
@@ -530,7 +526,6 @@ bool SessionDeviceManager::SendKeyboardCommand(int key_code, bool is_down,
 
 void SessionDeviceManager::SendMouseCommand(const RemoteAction &action,
                                             int selected_display) {
-  if (!owner_.privacy_.RemoteAllowed()) return;
   if (mouse_controller_) {
     mouse_controller_->SendMouseCommand(action, selected_display);
   }

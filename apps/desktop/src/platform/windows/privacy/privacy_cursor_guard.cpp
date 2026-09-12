@@ -135,7 +135,7 @@ bool PrivacyCursorGuard::Healthy(std::string& error) {
   if (restore_pending_ || (process_ && !helper_failure_reported_))
     RestoreAfterFailure(error);
   helper_failure_reported_ = true;
-  error = "System cursor helper exited; remote operation paused";
+  error = "System cursor helper exited; privacy screen will turn off";
   return false;
 }
 

@@ -44,20 +44,6 @@ void GuiRuntime::HandlePrivacy() {
     last_privacy_status_tick_ = 0;
   }
   const auto status = privacy_.Snapshot();
-  if (status.remote_paused && !privacy_was_paused_) {
-    keyboard_.ReleaseAllRemotePressedKeys("privacy_paused");
-  }
-#ifdef _WIN32
-  if (status.remote_paused && IsWindowsPrivacyDesktopAvailable())
-    devices_.ReleaseRemoteMouseButtons();
-#endif
-  if (privacy_was_paused_ && !status.remote_paused &&
-      status.state == PrivacyState::off && start_screen_capturer_) {
-    // A capture failure may have stopped the underlying capturer. Reuse the
-    // normal start/retry path when the user explicitly leaves privacy mode.
-    screen_capturer_is_started_ = devices_.StartScreenCapturer() == 0;
-  }
-  privacy_was_paused_ = status.remote_paused;
   const uint64_t now = SDL_GetTicks();
   if (!peer_ || (last_privacy_status_tick_ != 0 &&
                  status.revision == last_privacy_revision_ &&

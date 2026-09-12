@@ -1,4 +1,5 @@
 #include "mouse_controller.h"
+#include "../mac_injected_event.h"
 
 #include <remote_action.h>
 
@@ -210,6 +211,8 @@ int PlatformMouseController::SendMouseCommand(RemoteAction remote_action,
   }
 
   if (mouse_event) {
+    CGEventSetIntegerValueField(mouse_event, kCGEventSourceUserData,
+                                kCrossDeskInjectedEvent);
     CGEventPost(kCGHIDEventTap, mouse_event);
     CFRelease(mouse_event);
   }

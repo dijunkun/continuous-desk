@@ -22,12 +22,10 @@ struct TranslationRow {
 #define CROSSDESK_LOCALIZATION_ALL(X)                                          \
   X(privacy_screen, u8"隐私屏", "Privacy screen", u8"Приватный экран") \
   X(privacy_enable, u8"开启隐私屏", "Enable privacy screen", u8"Включить приватный экран") \
-  X(privacy_disable, u8"关闭隐私屏 / 恢复操作", "Turn privacy off / recover", u8"Выключить / восстановить") \
+  X(privacy_disable, u8"关闭隐私屏", "Disable privacy screen", u8"Выключить приватный экран") \
   X(privacy_on, u8"隐私屏：已开启", "Privacy screen: on", u8"Приватный экран: включён") \
   X(privacy_off, u8"隐私屏：已关闭", "Privacy screen: off", u8"Приватный экран: выключен") \
-  X(privacy_unsupported, u8"隐私屏：被控端暂不支持", "Privacy screen: unavailable on this host", u8"Приватный экран: недоступен на узле") \
-  X(privacy_timeout, u8"隐私屏状态未知：被控端确认超时，可关闭后重试", "Privacy state unknown: host confirmation timed out; turn off to recover", u8"Статус неизвестен: время ожидания истекло") \
-  X(privacy_paused, u8"隐私保护未就绪，远程操作已暂停。点击隐私屏按钮关闭并恢复。", "Privacy protection is not ready; remote operation paused. Click the privacy screen button to turn it off and recover.", u8"Приватность не готова; нажмите кнопку приватного экрана для выключения и восстановления управления.") \
+  X(privacy_unsupported, u8"隐私屏：不可用", "Privacy screen: unavailable", u8"Приватный экран: недоступен") \
   X(local_desktop, u8"本桌面", "Local Desktop", u8"Локальный рабочий стол")    \
   X(local_id, u8"本机ID", "Local ID", u8"Локальный ID")                        \
   X(local_id_copied_to_clipboard, u8"已复制到剪贴板", "Copied to clipboard",   \
@@ -250,8 +248,6 @@ struct TranslationRow {
     u8"Для работы приложения требуются следующие разрешения:")                 \
   X(show_main_window, u8"显示主界面", "Show Main Window",                    \
     u8"Показать главное окно")                                                \
-  X(privacy_verification, u8"隐私屏验证", "Privacy screen verification",       \
-    u8"Проверка приватности")                                                \
   X(privacy_screen_unlock_hint, u8"按下快捷键，解除隐私屏",                    \
     "To turn off the privacy screen, press",                                 \
     u8"Чтобы отключить приватный экран, нажмите")                             \

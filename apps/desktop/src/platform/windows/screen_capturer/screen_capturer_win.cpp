@@ -339,7 +339,7 @@ ScreenCapturerWin::~ScreenCapturerWin() { Destroy(); }
 
 void ScreenCapturerWin::NotifyPrivacyCapture(bool running) {
   if (privacy_)
-    privacy_->CaptureChanged(CaptureBackendName(impl_.get()), running);
+    privacy_->CaptureChanged(running);
 }
 
 int ScreenCapturerWin::Init(const int fps, cb_desktop_data cb) {
@@ -358,7 +358,7 @@ int ScreenCapturerWin::Init(const int fps, cb_desktop_data cb) {
                const char* reported_stream_id,
                const MiniRtcNativeVideoFrame* native_frame) {
     if (size == ScreenCapturer::kBackendReset) {
-      if (privacy_) privacy_->CaptureInterrupted();
+      if (privacy_) privacy_->Fail("Capture restarted; privacy screen will turn off");
       return;
     }
     if (secure_desktop_capture_active_.load(std::memory_order_relaxed)) {
@@ -367,7 +367,6 @@ int ScreenCapturerWin::Init(const int fps, cb_desktop_data cb) {
 
     const char* raw_stream_id = reported_stream_id ? reported_stream_id : "";
     std::string mapped_stream_id;
-    DisplayInfo privacy_display{"", 0, 0, 0, 0};
     {
       std::lock_guard<std::mutex> lock(alias_mutex_);
       auto it = stream_id_alias_.find(raw_stream_id);
@@ -381,21 +380,9 @@ int ScreenCapturerWin::Init(const int fps, cb_desktop_data cb) {
       mapped_stream_id = ResolveDisplayStreamId(
           mapped_stream_id.c_str(), canonical_displays_.size(),
           monitor_index_.load(std::memory_order_relaxed));
-      for (size_t index = 0; index < canonical_displays_.size(); ++index) {
-        if (mapped_stream_id == MakeDisplayStreamId(index)) {
-          privacy_display = canonical_displays_[index];
-          break;
-        }
-      }
     }
-    if (privacy_) {
-      if (privacy_->Engaged() && !IsWindowsPrivacyDesktopAvailable()) {
-        privacy_->Fail("Secure or unavailable desktop; privacy cannot cover system security UI. Remote operation paused.");
-        return;
-      }
-      if (!privacy_->ObserveFrame(data, size > 0 ? static_cast<size_t>(size) : 0,
-              w, h, privacy_display.left, privacy_display.top,
-              privacy_display.width, privacy_display.height)) return;
+    if (privacy_ && privacy_->Engaged() && !IsWindowsPrivacyDesktopAvailable()) {
+      privacy_->Fail("Secure or unavailable desktop; privacy screen will turn off");
     }
     if (mapped_stream_id.empty()) {
       if (!invalid_stream_id_logged_.exchange(true,
@@ -477,13 +464,12 @@ void ScreenCapturerWin::EmitCapturedFrame(
     unsigned char* data, int size, int width, int height,
     const char* stream_id, const MiniRtcNativeVideoFrame* native_frame,
     bool from_secure_desktop) {
-  // A helper IPC already in flight when enable began must not bypass the
-  // verified ordinary-desktop callback when it completes later.
+  // Secure-desktop capture takes priority; remove privacy without dropping
+  // the helper frame or delaying the remote session.
   if (from_secure_desktop && privacy_ && privacy_->Engaged()) {
-    privacy_->Fail("Secure desktop helper frame arrived during privacy; remote operation paused");
-    return;
+    privacy_->Fail("Secure desktop helper frame arrived; privacy screen will turn off");
   }
-  if (!cb_orig_ || (privacy_ && !privacy_->RemoteAllowed())) {
+  if (!cb_orig_) {
     return;
   }
 
@@ -650,12 +636,11 @@ int ScreenCapturerWin::Resume(int monitor_index) {
 
 int ScreenCapturerWin::SwitchTo(int monitor_index) {
   if (!impl_) return -1;
-  if (privacy_) privacy_->DisplayChanging();
   const int ret = impl_->SwitchTo(monitor_index);
   if (ret == 0) {
     monitor_index_.store(monitor_index, std::memory_order_relaxed);
   } else if (privacy_) {
-    privacy_->Fail("Display switch failed; remote operation paused");
+    privacy_->Fail("Display switch failed; privacy screen will turn off");
   }
   return ret;
 }
@@ -1128,13 +1113,11 @@ void ScreenCapturerWin::SecureDesktopCaptureLoop() {
   std::vector<uint8_t> secure_frame;
 
   while (running_.load(std::memory_order_relaxed)) {
-    // A privacy session must NEVER continue using the helper's secure-desktop
-    // GDI frames. Its HWNDs belong to the ordinary interactive desktop only.
+    // Privacy covers belong to the ordinary desktop. Drop privacy on a
+    // secure desktop, while continuing the normal helper capture path.
     if (privacy_ && privacy_->Engaged()) {
       if (!IsWindowsPrivacyDesktopAvailable())
-        privacy_->Fail("Secure desktop or lock screen; remote operation paused. Privacy cannot cover Windows security UI.");
-      std::this_thread::sleep_for(std::chrono::milliseconds(25));
-      continue;
+        privacy_->Fail("Secure desktop or lock screen; privacy screen will turn off. Privacy cannot cover Windows security UI.");
     }
     if (paused_.load(std::memory_order_relaxed)) {
       std::this_thread::sleep_for(std::chrono::milliseconds(10));

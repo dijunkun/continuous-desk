@@ -19,7 +19,7 @@
 namespace crossdesk {
 
 // The owner controls lifecycle; the dedicated message thread owns LL hooks.
-// Rendering, capture verification and session queries never run on this thread.
+// Rendering and session queries never run on this thread.
 class PrivacyInputGuard {
  public:
   ~PrivacyInputGuard();

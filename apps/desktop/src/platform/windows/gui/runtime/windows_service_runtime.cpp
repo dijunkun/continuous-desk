@@ -115,8 +115,7 @@ void GuiRuntime::HandleWindowsServiceIntegration() {
   bool force_broadcast = false;
   if (pending_windows_service_sas_.exchange(false, std::memory_order_relaxed)) {
     if (privacy_.Engaged()) {
-      privacy_.Fail("Queued security shortcut cancelled during privacy mode; remote operation paused");
-      return;
+      privacy_.Fail("Security shortcut requested; privacy screen will turn off");
     }
     const std::string response =
         QueryCrossDeskService("sas", kWindowsServiceSasTimeoutMs);

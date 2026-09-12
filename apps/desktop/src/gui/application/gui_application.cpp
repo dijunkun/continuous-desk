@@ -1029,7 +1029,6 @@ void GuiApplication::InitializeSettings() {
   localization_language_ =
       static_cast<ConfigCenter::LANGUAGE>(localization_language_index_);
   privacy_.SetText({
-      localization::privacy_verification[localization_language_index_],
       localization::privacy_screen_unlock_hint[localization_language_index_]});
 }
 
@@ -1237,6 +1236,8 @@ void GuiApplication::ResetSettingsUi() {
   ui_->main->set_capture_method_visible(true);
   ui_->main->set_capture_method_index(
       static_cast<int>(config_center_->GetScreenCaptureMethod()));
+#endif
+#if defined(_WIN32) || defined(__APPLE__)
   ui_->main->set_privacy_setting_available(true);
 #else
   ui_->main->set_privacy_setting_available(false);
@@ -2569,14 +2570,10 @@ void GuiApplication::SyncStreamWindow() {
     const int language = localization_language_index_;
     std::string text = !connected || !props->privacy_status_received_
         ? localization::privacy_screen[language]
-        : controls.timeout || controls.stale ? localization::privacy_timeout[language]
-        : controls.warning ? localization::privacy_paused[language]
+        : controls.unsupported ? localization::privacy_unsupported[language]
         : controls.enabled ? localization::privacy_on[language]
-        : !status.supported ? localization::privacy_unsupported[language]
         : controls.off ? localization::privacy_off[language]
         : localization::privacy_screen[language];
-    if (connected && controls.warning && status.reason[0] != '\0')
-      text += std::string("\n") + status.reason;
     (*ui_->stream)->set_privacy_status_text(UiText(text));
   }
   int remote_cursor_shape =
@@ -2822,13 +2819,17 @@ void GuiApplication::SyncServerWindow() {
                     });
   }
 
-  // Keep the local connection panel out of captured privacy sessions and
-  // transitions; it is unnecessary while the physical screens are covered.
+  // macOS covers the local panel with capture-excluded privacy windows. Keep
+  // the panel alive so remote controllers can still see and operate it.
+  bool show_controller_window = has_connected_controller;
+#if !defined(__APPLE__)
+  // Preserve the existing panel behavior on other platforms.
   const auto privacy_status = privacy_.Snapshot();
   const bool privacy_covering = privacy_status.overlay_active ||
       privacy_status.state == PrivacyState::starting ||
       privacy_status.state == PrivacyState::stopping;
-  const bool show_controller_window = has_connected_controller && !privacy_covering;
+  show_controller_window = show_controller_window && !privacy_covering;
+#endif
   if (show_controller_window && !ui_->server) {
     ui_->server.emplace(ui::ServerWindow::create());
     RegisterFontAwesome((*ui_->server)->window());
@@ -2998,7 +2999,6 @@ void GuiApplication::SaveSettingsFromUi() {
   localization_language_index_ = language_button_value_;
   config_center_->SetLanguage(localization_language_);
   privacy_.SetText({
-      localization::privacy_verification[localization_language_index_],
       localization::privacy_screen_unlock_hint[localization_language_index_]});
   config_center_->SetVideoQuality(
       static_cast<ConfigCenter::VIDEO_QUALITY>(video_quality_button_value_));
@@ -3026,6 +3026,8 @@ void GuiApplication::SaveSettingsFromUi() {
   }
   main->set_capture_method_index(
       static_cast<int>(config_center_->GetScreenCaptureMethod()));
+#endif
+#if defined(_WIN32) || defined(__APPLE__)
   if (config_center_->SetPrivacyScreen(main->get_privacy_on_connect_enabled()) !=
       0) {
     main->set_privacy_on_connect_enabled(
@@ -3365,7 +3367,7 @@ void GuiApplication::Cleanup() {
 #if _WIN32 && CROSSDESK_PORTABLE
   JoinPortableWindowsServiceInstallThread();
 #endif
-  privacy_.Fail("Application exiting; remote operation paused");
+  privacy_.Disable();
   clipboard_.Shutdown();
   keyboard_.ForceReleasePressedKeys();
   keyboard_.ReleaseAllRemotePressedKeys("application_exit");

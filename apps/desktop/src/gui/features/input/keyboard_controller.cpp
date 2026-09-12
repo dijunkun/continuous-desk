@@ -212,13 +212,11 @@ int KeyboardController::SendKeyCommand(int key_code, bool is_down,
 
 bool KeyboardController::InjectRemoteKey(int key_code, bool is_down,
                                          uint32_t scan_code, bool extended) {
-  if (is_down && !owner_.privacy_.RemoteAllowed()) return false;
 #if _WIN32
   if (owner_.privacy_.Engaged() && !IsWindowsPrivacyDesktopAvailable()) {
-    owner_.privacy_.Fail("Secure desktop or locked session; remote key injection paused");
-    return false;
+    owner_.privacy_.Fail("Secure desktop or locked session; privacy screen will turn off");
   }
-  if (!owner_.privacy_.Engaged() && owner_.local_service_status_received_ &&
+  if (owner_.local_service_status_received_ &&
       IsSecureDesktopInteractionRequired(owner_.local_interactive_stage_)) {
     const std::string response = SendCrossDeskSecureDesktopKeyInput(
         key_code, is_down, scan_code, extended, 1000);
@@ -252,7 +250,6 @@ bool KeyboardController::InjectRemoteKey(int key_code, bool is_down,
   }
 #endif
   // Recheck after the desktop query; key-up cleanup remains allowed while paused.
-  if (is_down && !owner_.privacy_.RemoteAllowed()) return false;
   return owner_.devices_.SendKeyboardCommand(key_code, is_down, scan_code,
                                              extended);
 }

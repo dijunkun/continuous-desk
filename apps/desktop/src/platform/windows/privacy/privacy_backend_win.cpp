@@ -11,7 +11,6 @@
 #include <wtsapi32.h>
 
 #include <algorithm>
-#include <cstring>
 #include <vector>
 
 #include "../windows_thread_dpi.h"
@@ -19,8 +18,6 @@
 #include "privacy_band_guard.h"
 #include "privacy_cursor_guard.h"
 #include "privacy_input_guard.h"
-#include "privacy_probe_pattern.h"
-#include "privacy_probe_renderer.h"
 #include "privacy_window_visibility.h"
 #include "rd_log.h"
 
@@ -118,7 +115,7 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
     if (!PrivacyBandGuard::Available(high_band_error))
       return {false, false, high_band_error};
     return {true, true,
-            "High-band privacy; live capture exclusion will be verified"};
+            "High-band privacy screen available"};
   }
 
   bool Enable(bool block_input, const PrivacyScreenText& text,
@@ -169,19 +166,9 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
         std::remove(window_events_.begin(), window_events_.end(), nullptr),
         window_events_.end());
     if (window_events_.empty()) event_owner_ = nullptr;
-    // Remove verification panels before exposing the local desktop.
-    for (auto& window : windows_) {
-      Destroy(window.probe);
-    }
     std::string band_error;
     band_guard_.Stop(band_error);
-    for (auto& window : windows_) {
-      if (band_guard_.stopped()) window.cover = nullptr;
-    }
-    windows_.erase(
-        std::remove_if(windows_.begin(), windows_.end(),
-                       [](const auto& w) { return !w.cover && !w.probe; }),
-        windows_.end());
+    if (band_guard_.stopped()) windows_.clear();
     input_guard_.Stop();
     block_input_ = false;
     if (hotkey_) {
@@ -231,12 +218,12 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
       health_error_ = Error("MsgWaitForMultipleObjectsEx privacy thread");
   }
 
-  PrivacyHealth Poll(bool force_check = false) override {
+  PrivacyHealth Poll() override {
     MSG message{};
     while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
       if (message.message == WM_QUIT)
         health_error_ =
-            "Privacy message thread is exiting; remote operation paused";
+            "Privacy message thread is exiting";
       TranslateMessage(&message);
       DispatchMessageW(&message);
     }
@@ -251,7 +238,7 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
     if (windows_.empty()) return {health_error_, false};
     // Input messages wake the thread immediately; expensive health queries
     // must retain their own cadence instead of running once per input event.
-    if (!force_check && !layout_changed_ &&
+    if (!layout_changed_ &&
         GetTickCount64() - last_check_ < 100) {
       if (coverage_dirty_ && last_health_.failure.empty()) {
         coverage_dirty_ = false;
@@ -273,8 +260,8 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
       std::string cursor_error;
       cursor_guard_.Stop(cursor_error);
       return {
-          "Secure desktop, lock screen or unavailable input desktop; remote "
-          "operation paused. Privacy windows cannot cover system security UI.",
+          "Secure desktop, lock screen or unavailable input desktop; "
+          "privacy screen will turn off",
           false};
     }
     std::string cursor_error;
@@ -283,8 +270,7 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
     if (FAILED(SHQueryUserNotificationState(&shell_state)) ||
         shell_state == QUNS_RUNNING_D3D_FULL_SCREEN) {
       return {
-          "Exclusive fullscreen or unknown display presentation; remote "
-          "operation paused",
+          "Exclusive fullscreen or unknown display presentation",
           false};
     }
     MonitorEnumeration monitors;
@@ -304,16 +290,14 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
                     });
     if (changed || layout_changed_) {
       layout_changed_ = false;
-      // Retain old covers until new monitor regions are covered. Never
-      // automatically resume remote work after a topology/DPI transition.
+      // Retain old covers until the monitor check completes, then release
+      // privacy so capture can refresh its display mapping independently.
       std::string error;
       if (!ReconcileMonitors(error))
         health_error_ = error;
       else
         health_error_ =
-            "Display layout/DPI changed; coverage rebuilt, remote operation "
-            "paused. Turn privacy off and reconnect to refresh display "
-            "mapping.";
+            "Display layout/DPI changed; privacy screen will turn off";
     }
     if (!health_error_.empty()) return {health_error_, false};
     BOOL composed = FALSE;
@@ -349,8 +333,7 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
                                        sizeof(cloaked))) ||
           cloaked) {
         return {
-            "Privacy window visibility, geometry or capture affinity was lost; "
-            "remote operation paused",
+            "Privacy window visibility, geometry or capture affinity was lost",
             false};
       }
     }
@@ -369,7 +352,7 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
         if (above_band == 0 || above_band == 1) continue;
         if (std::any_of(windows_.begin(), windows_.end(),
                         [above](const auto& own) {
-                          return above == own.cover || above == own.probe;
+                          return above == own.cover;
                         }))
           continue;
         RECT bounds{}, intersection{};
@@ -390,8 +373,7 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
               now - last_obstruction_log_ >= 1000) {
             LOG_WARN(
                 "Potential privacy cover overlap: class={}, process={}, "
-                "band={}, bounds=({}, {})-({}, {}), exstyle=0x{:x}; "
-                "remote operation paused",
+                "band={}, bounds=({}, {})-({}, {}), exstyle=0x{:x}",
                 window_class, process_id, above_band, bounds.left, bounds.top,
                 bounds.right, bounds.bottom,
                 GetWindowLongPtrW(above, GWL_EXSTYLE));
@@ -399,10 +381,9 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
             last_obstruction_log_ = now;
           }
           // HWND order cannot prove compositor order, but this window may
-          // display content. Retain protection and require explicit recovery.
+          // display content. Report failure so optional privacy is released.
           return {
-              "A visible window may overlap privacy coverage; "
-              "remote operation paused. Turn privacy off to recover.",
+              "A visible window may overlap privacy coverage",
               false};
         }
       }
@@ -410,99 +391,10 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
     return {health_error_, false};
   }
 
- public:
-  bool PaintChallenge(uint32_t value, const std::string& title,
-                      std::string& error) override {
-    using Pattern = PrivacyProbePattern;
-    for (auto& w : windows_) {
-      if (!w.probe && !CreateProbe(w, error)) return false;
-      PrivacyProbeImage image;
-      if (!RenderPrivacyProbe(title, PrivacyWindowDpi(w.probe),
-                              w.rect.right - w.rect.left - 2 * Pattern::kOffset,
-                              w.rect.bottom - w.rect.top - 2 * Pattern::kOffset,
-                              value, image, error)) {
-        LOG_ERROR("Privacy verification panel: {}", error);
-        return false;
-      }
-      HDC screen = GetDC(nullptr);
-      HDC memory = CreateCompatibleDC(screen);
-      BITMAPINFO info{};
-      info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-      info.bmiHeader.biWidth = image.width;
-      info.bmiHeader.biHeight = -image.height;
-      info.bmiHeader.biPlanes = 1;
-      info.bmiHeader.biBitCount = 32;
-      info.bmiHeader.biCompression = BI_RGB;
-      void* bits = nullptr;
-      HBITMAP bitmap =
-          CreateDIBSection(screen, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
-      bool ok = screen && memory && bitmap && bits;
-      if (ok) {
-        std::memcpy(bits, image.pixels.data(),
-                    image.pixels.size() * sizeof(uint32_t));
-        const auto old = SelectObject(memory, bitmap);
-        POINT position{w.rect.left + Pattern::kOffset,
-                       w.rect.top + Pattern::kOffset},
-            source{};
-        SIZE size{image.width, image.height};
-        ok = old && old != HGDI_ERROR;
-        if (ok) {
-          ok = UpdateLayeredWindow(w.probe, screen, &position, &size, memory,
-                                   &source, 0, nullptr, ULW_OPAQUE);
-          SelectObject(memory, old);
-        }
-      }
-      if (!ok) error = Error("Present opaque privacy verification panel");
-      if (bitmap) DeleteObject(bitmap);
-      if (memory) DeleteDC(memory);
-      if (screen) ReleaseDC(nullptr, screen);
-      if (!ok) return false;
-      // Present only after the complete text and square bitmap is ready.
-      if (!IsWindowVisible(w.probe) &&
-          (!SetWindowPos(
-               w.probe, HWND_TOPMOST, 0, 0, 0, 0,
-               SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW) ||
-           !IsWindowVisible(w.probe))) {
-        error = Error("Show privacy verification panel beneath cover");
-        return false;
-      }
-    }
-    return true;
-  }
-
-  bool ClearChallenges(std::string& error) override {
-    for (auto& w : windows_) {
-      Destroy(w.probe);
-      if (w.probe) {
-        error = "Could not remove the temporary capture verification window";
-        return false;
-      }
-    }
-    return true;
-  }
-
-  bool HasMonitor(int left, int top, int width, int height) const override {
-    // Metadata only; also serialized against Poll by PrivacyController.
-    return std::any_of(windows_.begin(), windows_.end(), [&](const auto& w) {
-      return w.rect.left == left && w.rect.top == top &&
-             w.rect.right - left == width && w.rect.bottom - top == height;
-    });
-  }
-
- private:
   struct Window {
     RECT rect{};
     HWND cover = nullptr;
-    HWND probe = nullptr;
   };
-
-  static void Destroy(HWND& hwnd) {
-    if (hwnd && IsWindow(hwnd) && !DestroyWindow(hwnd)) {
-      Error("DestroyWindow");
-      return;
-    }
-    hwnd = nullptr;
-  }
 
   bool Initialize(std::string& error) {
     if (sink_) return true;
@@ -537,22 +429,6 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
     return true;
   }
 
-  bool CreateProbe(Window& w, std::string& error) {
-    constexpr DWORD styles = WS_EX_TOPMOST | WS_EX_TOOLWINDOW |
-                             WS_EX_NOACTIVATE | WS_EX_LAYERED |
-                             WS_EX_TRANSPARENT;
-    w.probe =
-        CreateWindowExW(styles, kClassName, L"CrossDesk capture verification",
-                        WS_POPUP, w.rect.left + PrivacyProbePattern::kOffset,
-                        w.rect.top + PrivacyProbePattern::kOffset, 1, 1,
-                        nullptr, nullptr, GetModuleHandleW(nullptr), this);
-    if (!w.probe) {
-      error = Error("CreateWindowExW capture challenge");
-      return false;
-    }
-    return true;
-  }
-
   bool ReconcileMonitors(std::string& error) {
     MonitorEnumeration monitors;
     if (!EnumDisplayMonitors(nullptr, nullptr, EnumMonitor,
@@ -576,26 +452,18 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
         error = "High-band broker has not covered every physical monitor";
         return false;
       }
-      windows_.push_back({rect, reinterpret_cast<HWND>(cover->hwnd), nullptr});
+      windows_.push_back({rect, reinterpret_cast<HWND>(cover->hwnd)});
       LOG_INFO(
           "Privacy high-band cover ready: bounds=({}, {})-({}, {}), "
           "affinity=0x11, alpha=255",
           rect.left, rect.top, rect.right, rect.bottom);
     }
-    for (auto it = windows_.begin(); it != windows_.end();) {
-      if (std::none_of(monitors.rects.begin(), monitors.rects.end(),
-                       [&](const RECT& r) { return SameRect(it->rect, r); })) {
-        Destroy(it->probe);
-        it->cover = nullptr;  // The broker owns cover destruction.
-        if (!it->probe)
-          it = windows_.erase(it);
-        else {
-          error = "Old privacy window could not be released";
-          return false;
-        }
-      } else
-        ++it;
-    }
+    // Cover windows are owned and released by the broker.
+    windows_.erase(std::remove_if(windows_.begin(), windows_.end(),
+        [&](const auto& window) {
+          return std::none_of(monitors.rects.begin(), monitors.rects.end(),
+              [&](const RECT& rect) { return SameRect(window.rect, rect); });
+        }), windows_.end());
     return true;
   }
 
@@ -619,14 +487,6 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
     }
     if (msg == WM_NCHITTEST) return HTTRANSPARENT;
     if (msg == WM_CLOSE) return 0;
-    if (msg == WM_PAINT) {
-      // UpdateLayeredWindow owns the complete probe image; WM_PAINT only
-      // validates the update region and never draws a second copy.
-      PAINTSTRUCT paint{};
-      BeginPaint(hwnd, &paint);
-      EndPaint(hwnd, &paint);
-      return 0;
-    }
     if ((msg == WM_DISPLAYCHANGE || msg == WM_DPICHANGED) && self) {
       self->layout_changed_ = true;
       return 0;
@@ -641,7 +501,7 @@ class WindowsPrivacyBackend final : public PrivacyBackend {
         hwnd == self->sink_ || GetAncestor(hwnd, GA_ROOT) != hwnd)
       return;
     for (const auto& w : self->windows_)
-      if (hwnd == w.cover || hwnd == w.probe) return;
+      if (hwnd == w.cover) return;
     // OUTOFCONTEXT delivers on this window thread. Only mark work here;
     // monitor/session queries and Z-order changes remain in the control loop.
     const auto get_band = reinterpret_cast<GetPrivacyWindowBand>(

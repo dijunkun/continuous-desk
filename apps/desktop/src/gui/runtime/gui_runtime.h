@@ -98,7 +98,6 @@ class GuiRuntime : protected gui_detail::GuiState {
   std::deque<std::pair<std::string, PrivacyCommand>> privacy_commands_;
   uint32_t last_privacy_revision_ = 0;
   uint64_t last_privacy_status_tick_ = 0;
-  bool privacy_was_paused_ = false;
   ClipboardController clipboard_;
   SessionDeviceManager devices_;
   FileTransferManager transfers_;

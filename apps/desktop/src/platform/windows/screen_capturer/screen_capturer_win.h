@@ -45,7 +45,7 @@ class ScreenCapturerWin : public ScreenCapturer {
   int ResetToInitialMonitor() override;
 
   std::vector<DisplayInfo> GetDisplayInfoList() override;
-  void SetPrivacyController(PrivacyController* privacy) { privacy_ = privacy; }
+  void SetPrivacyController(PrivacyController* privacy) override { privacy_ = privacy; }
   // Set before Init(), while capture is stopped.
   void SetCaptureMethod(ScreenCaptureMethod method) { capture_method_ = method; }
 

@@ -7,6 +7,12 @@ namespace crossdesk {
 ScreenCapturerSck::ScreenCapturerSck() {}
 ScreenCapturerSck::~ScreenCapturerSck() {}
 
+void ScreenCapturerSck::SetPrivacyController(PrivacyController* privacy) {
+  privacy_ = privacy;
+  if (screen_capturer_sck_impl_)
+    screen_capturer_sck_impl_->SetPrivacyController(privacy);
+}
+
 int ScreenCapturerSck::Init(const int fps, cb_desktop_data cb) {
   if (cb) {
     on_data_ = cb;
@@ -16,6 +22,7 @@ int ScreenCapturerSck::Init(const int fps, cb_desktop_data cb) {
   }
 
   screen_capturer_sck_impl_ = CreateScreenCapturerSck();
+  screen_capturer_sck_impl_->SetPrivacyController(privacy_);
   const int ret = screen_capturer_sck_impl_->Init(fps, on_data_);
   if (ret != 0) {
     screen_capturer_sck_impl_.reset();
