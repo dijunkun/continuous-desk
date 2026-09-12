@@ -47,6 +47,11 @@ export global StreamStrings {
     in-out property <string> stats-connection-mode: "Mode";
 }
 
+struct ControlBarTooltip {
+    text: string,
+    anchor-x: length,
+}
+
 // The legacy ImGui control bar uses 24px buttons with Font Awesome rendered
 // at half of the 32px atlas size.  Keep this local to the stream window: the
 // shared IconButton is intentionally larger and is used by the other windows.
@@ -61,6 +66,10 @@ component ControlBarButton inherits Rectangle {
     in property <bool> muted: false;
     in property <length> icon-size: 16px;
     out property <bool> has-hover: touch.has-hover;
+    out property <ControlBarTooltip> tooltip-info: {
+        text: root.visible && touch.has-hover && !touch.pressed ? root.tooltip : "",
+        anchor-x: root.x + root.width / 2,
+    };
     callback clicked;
 
     width: 24px;
@@ -190,13 +199,25 @@ export component StreamWindow inherits Window {
     private property <bool> display-menu-animation-enabled: false;
     private property <float> display-menu-progress: 0.0;
     private property <bool> shortcut-menu-open: false;
-    private property <bool> privacy-tooltip-visible: false;
-    private property <bool> privacy-hovered: root.control-expanded
-        && privacy-button.has-hover && !root.control-dragging;
-    private property <length> privacy-tooltip-width: min(320px, video.width);
-    private property <length> privacy-tooltip-x: min(max(0px,
-        control.x + (root.control-docked-left ? 105px : 138px)),
-        video.width - root.privacy-tooltip-width);
+    private property <bool> control-tooltip-visible: false;
+    private property <ControlBarTooltip> hovered-control: {
+        if root.window-active && !root.control-dragging
+            && !root.display-menu-open && !root.shortcut-menu-open {
+            if collapse-button.has-hover { return collapse-button.tooltip-info; }
+            if root.control-expanded {
+                if display-button.has-hover { return display-button.tooltip-info; }
+                if shortcut-button.has-hover { return shortcut-button.tooltip-info; }
+                if mouse-button.has-hover { return mouse-button.tooltip-info; }
+                if privacy-button.has-hover { return privacy-button.tooltip-info; }
+                if audio-button.has-hover { return audio-button.tooltip-info; }
+                if file-button.has-hover { return file-button.tooltip-info; }
+                if stats-button.has-hover { return stats-button.tooltip-info; }
+                if fullscreen-button.has-hover { return fullscreen-button.tooltip-info; }
+                if close-button.has-hover { return close-button.tooltip-info; }
+            }
+        }
+        return { text: "", anchor-x: 0px };
+    }
     // A popup can remove itself from the scene in its clicked callback before
     // the video input layer observes the same pointer release. Remember that
     // the press belonged to local UI so that release cannot reach the peer.
@@ -236,11 +257,18 @@ export component StreamWindow inherits Window {
         }
     }
 
-    changed privacy-hovered => { root.privacy-tooltip-visible = false; }
-    privacy-tooltip-timer := Timer {
+    changed hovered-control => {
+        root.control-tooltip-visible = false;
+        control-tooltip-timer.running = root.hovered-control.text != "";
+        if root.hovered-control.text != "" { control-tooltip-timer.restart(); }
+    }
+    control-tooltip-timer := Timer {
         interval: 450ms;
-        running: root.privacy-hovered && !root.privacy-tooltip-visible;
-        triggered => { root.privacy-tooltip-visible = true; }
+        running: false;
+        triggered => {
+            self.running = false;
+            root.control-tooltip-visible = true;
+        }
     }
 
     is-local-control-area(pointer-x, pointer-y) => {
@@ -685,7 +713,8 @@ export component StreamWindow inherits Window {
                     background: ImGuiLineStyle.control-separator;
                 }
 
-                if root.control-expanded: display-button := ControlBarButton {
+                display-button := ControlBarButton {
+                    visible: root.control-expanded;
                     x: root.control-docked-left ? 9px : 42px; y: 7px;
                     icon: FontAwesomeIcons.display;
                     badge: root.selected-display + 1;
@@ -701,7 +730,8 @@ export component StreamWindow inherits Window {
                         }
                     }
                 }
-                if root.control-expanded: shortcut-button := ControlBarButton {
+                shortcut-button := ControlBarButton {
+                    visible: root.control-expanded;
                     x: root.control-docked-left ? 41px : 74px; y: 7px;
                     icon: FontAwesomeIcons.keyboard; tooltip: StreamStrings.send-shortcut;
                     clicked => {
@@ -712,36 +742,42 @@ export component StreamWindow inherits Window {
                         root.display-menu-open = false;
                     }
                 }
-                if root.control-expanded: mouse-button := ControlBarButton {
+                mouse-button := ControlBarButton {
+                    visible: root.control-expanded;
                     x: root.control-docked-left ? 73px : 106px; y: 7px;
                     icon: FontAwesomeIcons.computer-mouse; slashed: !root.mouse-control-enabled;
                     tooltip: root.mouse-control-enabled ? StreamStrings.release-mouse : StreamStrings.control-mouse;
                     clicked => { root.toggle-mouse-control(); }
                 }
-                if root.control-expanded: audio-button := ControlBarButton {
+                audio-button := ControlBarButton {
+                    visible: root.control-expanded;
                     x: root.control-docked-left ? 137px : 170px; y: 7px;
                     icon: FontAwesomeIcons.volume-high; slashed: !root.audio-enabled;
                     tooltip: root.audio-enabled ? StreamStrings.mute : StreamStrings.audio;
                     clicked => { root.toggle-audio(); }
                 }
-                if root.control-expanded: file-button := ControlBarButton {
+                file-button := ControlBarButton {
+                    visible: root.control-expanded;
                     x: root.control-docked-left ? 169px : 202px; y: 7px;
                     icon: FontAwesomeIcons.folder-open; tooltip: StreamStrings.select-file;
                     clicked => { root.select-file(); }
                 }
-                if root.control-expanded: stats-button := ControlBarButton {
+                stats-button := ControlBarButton {
+                    visible: root.control-expanded;
                     x: root.control-docked-left ? 201px : 234px; y: 7px;
                     icon: FontAwesomeIcons.signal; selected: root.stats-visible;
                     tooltip: root.stats-visible ? StreamStrings.hide-stats : StreamStrings.show-stats;
                     clicked => { root.toggle-stats(); }
                 }
-                if root.control-expanded: fullscreen-button := ControlBarButton {
+                fullscreen-button := ControlBarButton {
+                    visible: root.control-expanded;
                     x: root.control-docked-left ? 233px : 266px; y: 7px;
                     icon: root.fullscreen-enabled ? FontAwesomeIcons.compress : FontAwesomeIcons.expand;
                     tooltip: root.fullscreen-enabled ? StreamStrings.exit-fullscreen : StreamStrings.fullscreen;
                     clicked => { root.toggle-fullscreen(); }
                 }
-                if root.control-expanded: close-button := ControlBarButton {
+                close-button := ControlBarButton {
+                    visible: root.control-expanded;
                     x: root.control-docked-left ? 265px : 298px; y: 7px;
                     icon: FontAwesomeIcons.xmark; tooltip: StreamStrings.disconnect;
                     clicked => { root.disconnect(); }
@@ -769,7 +805,9 @@ export component StreamWindow inherits Window {
                     slashed: root.privacy-off && !root.privacy-unsupported;
                     muted: root.privacy-unsupported;
                     action-enabled: root.privacy-can-toggle;
-                    tooltip: root.privacy-status-text;
+                    tooltip: root.privacy-status-text
+                        + (root.privacy-can-toggle ? "\n" + (root.privacy-active
+                            ? StreamStrings.privacy-disable : StreamStrings.privacy-enable) : "");
                     clicked => { root.toggle-privacy(); }
                 }
 
@@ -1001,18 +1039,25 @@ export component StreamWindow inherits Window {
                 }
             }
 
-            if root.privacy-hovered && root.privacy-tooltip-visible: Rectangle {
-                x: root.privacy-tooltip-x;
-                width: root.privacy-tooltip-width;
-                height: privacy-tip.preferred-height + 16px;
-                y: control.y + control.height + self.height <= video.height
-                    ? control.y + control.height : max(0px, control.y - self.height);
+            // Measure unwrapped text so short hints stay compact. Render outside
+            // the clipped control bar, capping longer hints before wrapping.
+            control-tooltip-width-probe := Text {
+                visible: false;
+                text: root.hovered-control.text;
+                font-size: ImGuiFontStyle.body;
+            }
+            if root.hovered-control.text != "" && root.control-tooltip-visible: Rectangle {
+                width: min(240px, video.width - 8px,
+                    control-tooltip-width-probe.preferred-width + 16px);
+                x: min(max(4px, control.x + root.hovered-control.anchor-x - self.width / 2),
+                    video.width - self.width - 4px);
+                height: control-tip.preferred-height + 12px;
+                y: control.y + control.height + self.height + 8px <= video.height
+                    ? control.y + control.height + 4px : max(4px, control.y - self.height - 4px);
                 background: #30343bf5; border-radius: 5px; z: 12;
-                privacy-tip := Text {
-                    x: 8px; y: 8px; width: parent.width - 16px;
-                    text: root.privacy-status-text
-                        + (root.privacy-can-toggle ? "\n" + (root.privacy-active
-                            ? StreamStrings.privacy-disable : StreamStrings.privacy-enable) : "");
+                control-tip := Text {
+                    x: 8px; y: 6px; width: parent.width - 16px;
+                    text: root.hovered-control.text;
                     color: white; font-size: ImGuiFontStyle.body; wrap: word-wrap;
                 }
             }
