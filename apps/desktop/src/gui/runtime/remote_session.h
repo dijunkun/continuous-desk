@@ -161,7 +161,6 @@ struct RemoteSession {
   PrivacyStatus privacy_status_{};
   bool privacy_status_received_ = false;
   bool privacy_command_pending_ = false;
-  bool privacy_block_local_input_ = true;
   uint64_t privacy_command_tick_ = 0;
   uint32_t privacy_request_revision_ = 0;
   uint64_t privacy_status_tick_ = 0;

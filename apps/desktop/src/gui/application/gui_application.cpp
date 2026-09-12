@@ -34,6 +34,7 @@
 #include "platform.h"
 #include "platform/video_renderer.h"
 #include "rendering/slint_video_presenter.h"
+#include "runtime/privacy_control_state.h"
 #if _WIN32
 #include <windows.h>
 
@@ -1230,13 +1231,15 @@ void GuiApplication::ResetSettingsUi() {
   ui_->main->set_self_hosted_enabled(enable_self_hosted_);
   ui_->main->set_autostart_enabled(enable_autostart_);
   ui_->main->set_daemon_enabled(enable_daemon_);
+  ui_->main->set_privacy_on_connect_enabled(
+      config_center_->IsEnablePrivacyScreen());
 #ifdef _WIN32
   ui_->main->set_capture_method_visible(true);
   ui_->main->set_capture_method_index(
       static_cast<int>(config_center_->GetScreenCaptureMethod()));
-  ui_->main->set_privacy_setting_visible(true);
-  ui_->main->set_privacy_on_connect_enabled(
-      config_center_->IsEnablePrivacyScreen());
+  ui_->main->set_privacy_setting_available(true);
+#else
+  ui_->main->set_privacy_setting_available(false);
 #endif
   ui_->main->set_file_save_path(file_transfer_save_path_buf_);
   ui_->main->set_server_host(signal_server_ip_self_);
@@ -1607,11 +1610,16 @@ void GuiApplication::BindStreamCallbacks() {
     {
       std::lock_guard lock(props->privacy_status_mutex_);
       const auto& status = props->privacy_status_;
-      action.pc.flag = status.overlay_active || status.remote_paused || status.state == PrivacyState::on ||
-          status.state == PrivacyState::failed ? PrivacyCommandFlag::disable : PrivacyCommandFlag::enable;
-      action.pc.block_local_input = props->privacy_block_local_input_;
+      const uint64_t now = SDL_GetTicks();
+      const auto controls = GetPrivacyControlState(
+          status, props->privacy_status_received_, props->privacy_command_pending_,
+          now - props->privacy_status_tick_, now - props->privacy_command_tick_);
+      if (!controls.can_toggle) return;
+      action.pc.flag = controls.active ? PrivacyCommandFlag::disable
+                                      : PrivacyCommandFlag::enable;
+      action.pc.block_local_input = true;
       props->privacy_command_pending_ = true;
-      props->privacy_command_tick_ = SDL_GetTicks();
+      props->privacy_command_tick_ = now;
       props->privacy_request_revision_ = status.revision;
     }
     const auto message = action.to_json();
@@ -1621,12 +1629,6 @@ void GuiApplication::BindStreamCallbacks() {
       props->privacy_command_pending_ = false;
       props->privacy_status_received_ = false;
       LOG_WARN("Privacy command send failed, remote_id={}", props->remote_id_);
-    }
-  });
-  stream->on_toggle_privacy_input([this] {
-    if (auto props = SelectedSession()) {
-      std::lock_guard lock(props->privacy_status_mutex_);
-      props->privacy_block_local_input_ = !props->privacy_block_local_input_;
     }
   });
   stream->on_toggle_mouse_control([this] {
@@ -2554,23 +2556,27 @@ void GuiApplication::SyncStreamWindow() {
     std::lock_guard lock(props->privacy_status_mutex_);
     const auto& status = props->privacy_status_;
     const uint64_t now = SDL_GetTicks();
-    const bool timeout = props->privacy_command_pending_ && now - props->privacy_command_tick_ > 15000;
-    const bool stale = props->privacy_status_received_ && now - props->privacy_status_tick_ > 5000;
-    const bool pending = props->privacy_command_pending_ && !timeout;
-    const bool active = status.overlay_active || status.remote_paused || status.state == PrivacyState::on || status.state == PrivacyState::failed;
-    (*ui_->stream)->set_privacy_active(active);
-    (*ui_->stream)->set_privacy_can_toggle(props->control_mouse_ &&
-        props->connection_status_.load() == ConnectionStatus::Connected && !pending &&
-        (active || (props->privacy_status_received_ && status.supported && !stale)));
-    (*ui_->stream)->set_privacy_can_change_input(props->control_mouse_ && !active && !pending && status.input_block_supported);
-    (*ui_->stream)->set_privacy_block_input(active ? status.input_blocked : props->privacy_block_local_input_);
-    (*ui_->stream)->set_privacy_remote_paused(status.remote_paused || (active && (stale || timeout)));
+    const auto controls = GetPrivacyControlState(
+        status, props->privacy_status_received_, props->privacy_command_pending_,
+        now - props->privacy_status_tick_, now - props->privacy_command_tick_);
+    const bool connected =
+        props->connection_status_.load() == ConnectionStatus::Connected;
+    (*ui_->stream)->set_privacy_active(controls.active);
+    (*ui_->stream)->set_privacy_off(connected && controls.off);
+    (*ui_->stream)->set_privacy_unsupported(controls.unsupported);
+    (*ui_->stream)->set_privacy_can_toggle(
+        props->control_mouse_ && connected && controls.can_toggle);
     const int language = localization_language_index_;
-    std::string text = !props->privacy_status_received_ ? localization::privacy_unknown[language] :
-        (timeout || stale) ? localization::privacy_timeout[language] :
-        pending ? localization::privacy_pending[language] :
-        status.remote_paused ? localization::privacy_paused[language] : status.reason;
-    if (status.remote_paused && !pending) text += std::string("\n") + status.reason;
+    std::string text = !connected || !props->privacy_status_received_
+        ? localization::privacy_screen[language]
+        : controls.timeout || controls.stale ? localization::privacy_timeout[language]
+        : controls.warning ? localization::privacy_paused[language]
+        : controls.enabled ? localization::privacy_on[language]
+        : !status.supported ? localization::privacy_unsupported[language]
+        : controls.off ? localization::privacy_off[language]
+        : localization::privacy_screen[language];
+    if (connected && controls.warning && status.reason[0] != '\0')
+      text += std::string("\n") + status.reason;
     (*ui_->stream)->set_privacy_status_text(UiText(text));
   }
   int remote_cursor_shape =

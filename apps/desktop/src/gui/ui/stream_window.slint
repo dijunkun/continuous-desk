@@ -27,7 +27,6 @@ export global StreamStrings {
     in-out property <string> send-shortcut: "Send Shortcut";
     in-out property <string> privacy-enable: "Enable privacy screen";
     in-out property <string> privacy-disable: "Turn privacy off / recover";
-    in-out property <string> privacy-block-input: "Block local input on enable";
     in-out property <string> control-mouse: "Control Mouse";
     in-out property <string> release-mouse: "Release Mouse";
     in-out property <string> audio: "Audio Capture";
@@ -57,19 +56,23 @@ component ControlBarButton inherits Rectangle {
     in property <string> tooltip: "";
     in property <bool> selected: false;
     in property <bool> slashed: false;
+    in property <bool> action-enabled: true;
+    // Capability and temporary command availability have different visuals.
+    in property <bool> muted: false;
     in property <length> icon-size: 16px;
+    out property <bool> has-hover: touch.has-hover;
     callback clicked;
 
     width: 24px;
     height: 24px;
-    background: touch.pressed ? #0f87fa
+    background: root.muted ? #eef0f3 : touch.pressed && root.action-enabled ? #0f87fa
                               : touch.has-hover ? #4296fa
                                                 : root.selected ? #4296fa : #4296fa66;
     border-radius: 3px;
 
     Text {
         text: root.icon;
-        color: #24272d;
+        color: root.muted ? #8a8f96 : #24272d;
         font-family: "Font Awesome 6 Free";
         font-weight: 900;
         font-size: root.icon-size;
@@ -108,7 +111,8 @@ component ControlBarButton inherits Rectangle {
     }
 
     touch := TouchArea {
-        clicked => { root.clicked(); }
+        // Keep disabled controls hit-testable so clicks cannot reach the peer.
+        clicked => { if root.action-enabled { root.clicked(); } }
     }
 }
 
@@ -139,10 +143,10 @@ export component StreamWindow inherits Window {
     in property <bool> mouse-control-enabled: true;
     in property <bool> privacy-can-toggle: false;
     in property <bool> privacy-active: false;
-    in property <bool> privacy-block-input: true;
-    in property <bool> privacy-can-change-input: false;
-    in property <bool> privacy-remote-paused: false;
-    in property <string> privacy-status-text: "Privacy screen: waiting for host";
+    in property <bool> privacy-off: false;
+    in property <bool> privacy-unsupported: false;
+    // Privacy feedback stays on its toolbar button and hover tooltip.
+    in property <string> privacy-status-text: "Privacy screen";
     // Numeric values mirror crossdesk::RemoteCursorShape and Slint's MouseCursor.
     in property <bool> remote-cursor-active: false;
     in property <int> remote-cursor-shape: 0;
@@ -164,7 +168,6 @@ export component StreamWindow inherits Window {
     callback send-shortcut(string);
     callback toggle-mouse-control;
     callback toggle-privacy;
-    callback toggle-privacy-input;
     callback toggle-audio;
     callback select-file;
     callback close-file-transfer;
@@ -187,6 +190,13 @@ export component StreamWindow inherits Window {
     private property <bool> display-menu-animation-enabled: false;
     private property <float> display-menu-progress: 0.0;
     private property <bool> shortcut-menu-open: false;
+    private property <bool> privacy-tooltip-visible: false;
+    private property <bool> privacy-hovered: root.control-expanded
+        && privacy-button.has-hover && !root.control-dragging;
+    private property <length> privacy-tooltip-width: min(320px, video.width);
+    private property <length> privacy-tooltip-x: min(max(0px,
+        control.x + (root.control-docked-left ? 105px : 138px)),
+        video.width - root.privacy-tooltip-width);
     // A popup can remove itself from the scene in its clicked callback before
     // the video input layer observes the same pointer release. Remember that
     // the press belonged to local UI so that release cannot reach the peer.
@@ -226,6 +236,13 @@ export component StreamWindow inherits Window {
         }
     }
 
+    changed privacy-hovered => { root.privacy-tooltip-visible = false; }
+    privacy-tooltip-timer := Timer {
+        interval: 450ms;
+        running: root.privacy-hovered && !root.privacy-tooltip-visible;
+        triggered => { root.privacy-tooltip-visible = true; }
+    }
+
     is-local-control-area(pointer-x, pointer-y) => {
         let over-control = pointer-x >= control.x
             && pointer-x <= control.x + control.width
@@ -243,9 +260,9 @@ export component StreamWindow inherits Window {
         let shortcut-menu-y = control.y + 40px;
         let over-shortcut-menu = root.shortcut-menu-open
             && pointer-x >= shortcut-menu-x
-            && pointer-x <= shortcut-menu-x + 360px
+            && pointer-x <= shortcut-menu-x + 180px
             && pointer-y >= shortcut-menu-y
-            && pointer-y <= shortcut-menu-y + 200px;
+            && pointer-y <= shortcut-menu-y + 68px;
         return over-control || over-display-menu || over-shortcut-menu;
     }
 
@@ -650,7 +667,7 @@ export component StreamWindow inherits Window {
             control := Rectangle {
                 x: root.control-dragging ? root.control-drag-x : root.control-docked-left ? 0px : parent.width - self.width;
                 y: min(max(0px, root.control-pos-y), parent.height - self.height);
-                width: root.control-expanded ? min(300px, parent.width) : 20px;
+                width: root.control-expanded ? min(332px, parent.width) : 20px;
                 height: root.stats-visible && root.control-expanded ? min(180px, parent.height) : 38px;
                 background: white;
                 border-width: 1px;
@@ -702,40 +719,40 @@ export component StreamWindow inherits Window {
                     clicked => { root.toggle-mouse-control(); }
                 }
                 if root.control-expanded: audio-button := ControlBarButton {
-                    x: root.control-docked-left ? 105px : 138px; y: 7px;
+                    x: root.control-docked-left ? 137px : 170px; y: 7px;
                     icon: FontAwesomeIcons.volume-high; slashed: !root.audio-enabled;
                     tooltip: root.audio-enabled ? StreamStrings.mute : StreamStrings.audio;
                     clicked => { root.toggle-audio(); }
                 }
                 if root.control-expanded: file-button := ControlBarButton {
-                    x: root.control-docked-left ? 137px : 170px; y: 7px;
+                    x: root.control-docked-left ? 169px : 202px; y: 7px;
                     icon: FontAwesomeIcons.folder-open; tooltip: StreamStrings.select-file;
                     clicked => { root.select-file(); }
                 }
                 if root.control-expanded: stats-button := ControlBarButton {
-                    x: root.control-docked-left ? 169px : 202px; y: 7px;
+                    x: root.control-docked-left ? 201px : 234px; y: 7px;
                     icon: FontAwesomeIcons.signal; selected: root.stats-visible;
                     tooltip: root.stats-visible ? StreamStrings.hide-stats : StreamStrings.show-stats;
                     clicked => { root.toggle-stats(); }
                 }
                 if root.control-expanded: fullscreen-button := ControlBarButton {
-                    x: root.control-docked-left ? 201px : 234px; y: 7px;
+                    x: root.control-docked-left ? 233px : 266px; y: 7px;
                     icon: root.fullscreen-enabled ? FontAwesomeIcons.compress : FontAwesomeIcons.expand;
                     tooltip: root.fullscreen-enabled ? StreamStrings.exit-fullscreen : StreamStrings.fullscreen;
                     clicked => { root.toggle-fullscreen(); }
                 }
                 if root.control-expanded: close-button := ControlBarButton {
-                    x: root.control-docked-left ? 233px : 266px; y: 7px;
+                    x: root.control-docked-left ? 265px : 298px; y: 7px;
                     icon: FontAwesomeIcons.xmark; tooltip: StreamStrings.disconnect;
                     clicked => { root.disconnect(); }
                 }
 
                 if root.control-expanded && root.control-docked-left: Rectangle {
-                    x: 267px; y: 12px; width: 2px; height: 15px;
+                    x: 299px; y: 12px; width: 2px; height: 15px;
                     background: ImGuiLineStyle.control-separator;
                 }
                 collapse-button := ControlBarButton {
-                    x: root.control-expanded ? (root.control-docked-left ? 275px : 10px) : 2px;
+                    x: root.control-expanded ? (root.control-docked-left ? 307px : 10px) : 2px;
                     y: 7px;
                     width: 15px;
                     icon: root.control-expanded
@@ -743,6 +760,17 @@ export component StreamWindow inherits Window {
                           : (root.control-docked-left ? FontAwesomeIcons.angle-right : FontAwesomeIcons.angle-left);
                     tooltip: root.control-expanded ? StreamStrings.collapse-control : StreamStrings.expand-control;
                     clicked => { root.control-expanded = !root.control-expanded; }
+                }
+
+                privacy-button := ControlBarButton {
+                    visible: root.control-expanded;
+                    x: root.control-docked-left ? 105px : 138px; y: 7px;
+                    icon: FontAwesomeIcons.user-secret;
+                    slashed: root.privacy-off && !root.privacy-unsupported;
+                    muted: root.privacy-unsupported;
+                    action-enabled: root.privacy-can-toggle;
+                    tooltip: root.privacy-status-text;
+                    clicked => { root.toggle-privacy(); }
                 }
 
                 if root.stats-visible && root.control-expanded: stats-table := Rectangle {
@@ -954,7 +982,7 @@ export component StreamWindow inherits Window {
             }
 
             if root.shortcut-menu-open: Rectangle {
-                x: control.x + (root.control-docked-left ? 41px : 74px); y: control.y + 40px; width: 360px; height: 200px;
+                x: control.x + (root.control-docked-left ? 41px : 74px); y: control.y + 40px; width: 180px; height: 68px;
                 background: white; border-width: 1px; border-color: ImGuiLineStyle.border; border-radius: 5px; z: 11;
                 VerticalLayout {
                     padding: 4px; spacing: 1px;
@@ -970,32 +998,23 @@ export component StreamWindow inherits Window {
                             clicked => { root.send-shortcut(shortcut); root.shortcut-menu-open = false; }
                         }
                     }
-                    Rectangle {
-                        height: 29px; background: privacy-touch.has-hover ? #e8eef9 : transparent;
-                        Text { x: 8px; text: root.privacy-active ? StreamStrings.privacy-disable : StreamStrings.privacy-enable; color: root.privacy-can-toggle ? #30343b : #8a8f96; font-size: ImGuiFontStyle.body; vertical-alignment: center; }
-                        privacy-touch := TouchArea {
-                            enabled: root.privacy-can-toggle;
-                            pointer-event(event) => { if event.kind == PointerEventKind.down { root.suppress-next-remote-pointer-release = true; } }
-                            clicked => { root.toggle-privacy(); }
-                        }
-                    }
-                    Rectangle {
-                        height: 29px; background: privacy-input-touch.has-hover ? #e8eef9 : transparent;
-                        Text { x: 8px; text: (root.privacy-block-input ? "[✓] " : "[ ] ") + StreamStrings.privacy-block-input; color: root.privacy-can-change-input ? #30343b : #8a8f96; font-size: ImGuiFontStyle.body; vertical-alignment: center; }
-                        privacy-input-touch := TouchArea {
-                            enabled: root.privacy-can-change-input;
-                            pointer-event(event) => { if event.kind == PointerEventKind.down { root.suppress-next-remote-pointer-release = true; } }
-                            clicked => { root.toggle-privacy-input(); }
-                        }
-                    }
-                    Text { height: 68px; text: root.privacy-status-text; wrap: word-wrap; color: #555b66; font-size: ImGuiFontStyle.body; }
                 }
             }
 
-            if root.privacy-remote-paused: Rectangle {
-                x: 0px; y: 65px; width: parent.width; height: parent.height - 65px;
-                background: #16181d; z: 6;
-                Text { x: 30px; width: parent.width - 60px; text: root.privacy-status-text; color: #eeeeee; wrap: word-wrap; horizontal-alignment: center; vertical-alignment: center; }
+            if root.privacy-hovered && root.privacy-tooltip-visible: Rectangle {
+                x: root.privacy-tooltip-x;
+                width: root.privacy-tooltip-width;
+                height: privacy-tip.preferred-height + 16px;
+                y: control.y + control.height + self.height <= video.height
+                    ? control.y + control.height : max(0px, control.y - self.height);
+                background: #30343bf5; border-radius: 5px; z: 12;
+                privacy-tip := Text {
+                    x: 8px; y: 8px; width: parent.width - 16px;
+                    text: root.privacy-status-text
+                        + (root.privacy-can-toggle ? "\n" + (root.privacy-active
+                            ? StreamStrings.privacy-disable : StreamStrings.privacy-enable) : "");
+                    color: white; font-size: ImGuiFontStyle.body; wrap: word-wrap;
+                }
             }
 
             // Transfer progress overlay at bottom-left.

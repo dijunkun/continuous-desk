@@ -144,7 +144,6 @@ inline int ApplyStreamWindowStrings(
   strings.set_send_shortcut(Text(localization::send_shortcut[language]));
   strings.set_privacy_enable(Text(localization::privacy_enable[language]));
   strings.set_privacy_disable(Text(localization::privacy_disable[language]));
-  strings.set_privacy_block_input(Text(localization::privacy_block_input[language]));
   strings.set_control_mouse(Text(localization::control_mouse[language]));
   strings.set_release_mouse(Text(localization::release_mouse[language]));
   strings.set_audio(Text(localization::audio_capture[language]));

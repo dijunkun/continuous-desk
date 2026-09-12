@@ -20,13 +20,14 @@ struct TranslationRow {
 
 // Single source of truth for all UI strings.
 #define CROSSDESK_LOCALIZATION_ALL(X)                                          \
+  X(privacy_screen, u8"隐私屏", "Privacy screen", u8"Приватный экран") \
   X(privacy_enable, u8"开启隐私屏", "Enable privacy screen", u8"Включить приватный экран") \
   X(privacy_disable, u8"关闭隐私屏 / 恢复操作", "Turn privacy off / recover", u8"Выключить / восстановить") \
-  X(privacy_block_input, u8"开启时屏蔽本地输入", "Block local input on enable", u8"Блокировать локальный ввод") \
-  X(privacy_unknown, u8"隐私屏：未收到被控端确认（旧版本可能不支持）", "Privacy: no host confirmation (older hosts may not support it)", u8"Приватность: нет подтверждения от узла") \
-  X(privacy_pending, u8"隐私屏：等待被控端完成验证", "Privacy: waiting for host verification", u8"Приватность: ожидание проверки") \
+  X(privacy_on, u8"隐私屏：已开启", "Privacy screen: on", u8"Приватный экран: включён") \
+  X(privacy_off, u8"隐私屏：已关闭", "Privacy screen: off", u8"Приватный экран: выключен") \
+  X(privacy_unsupported, u8"隐私屏：被控端暂不支持", "Privacy screen: unavailable on this host", u8"Приватный экран: недоступен на узле") \
   X(privacy_timeout, u8"隐私屏状态未知：被控端确认超时，可关闭后重试", "Privacy state unknown: host confirmation timed out; turn off to recover", u8"Статус неизвестен: время ожидания истекло") \
-  X(privacy_paused, u8"隐私保护未就绪，远程操作已暂停。可在快捷菜单关闭隐私屏恢复。", "Privacy protection is not ready; remote operation paused. Turn privacy off in the shortcut menu to recover.", u8"Приватность не готова; удалённое управление приостановлено.") \
+  X(privacy_paused, u8"隐私保护未就绪，远程操作已暂停。点击隐私屏按钮关闭并恢复。", "Privacy protection is not ready; remote operation paused. Click the privacy screen button to turn it off and recover.", u8"Приватность не готова; нажмите кнопку приватного экрана для выключения и восстановления управления.") \
   X(local_desktop, u8"本桌面", "Local Desktop", u8"Локальный рабочий стол")    \
   X(local_id, u8"本机ID", "Local ID", u8"Локальный ID")                        \
   X(local_id_copied_to_clipboard, u8"已复制到剪贴板", "Copied to clipboard",   \
