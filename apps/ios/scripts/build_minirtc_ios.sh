@@ -77,17 +77,42 @@ WIRE_MANIFEST_FILE="${WIRE_WORK_DIR}/xmake.lua"
 WIRE_LIBRARY="${WIRE_BUILD_DIR}/iphoneos/arm64/${MODE}/libcrossdesk_wire.a"
 
 mkdir -p "${OUTPUT_DIR}" "${WIRE_WORK_DIR}"
-cp "${REPO_DIR}/xmake.lua" "${WIRE_MANIFEST_FILE}"
+if ! cmp -s "${REPO_DIR}/xmake.lua" "${WIRE_MANIFEST_FILE}"; then
+  cp "${REPO_DIR}/xmake.lua" "${WIRE_MANIFEST_FILE}"
+fi
+
+# Reuse Xmake's compiler/dependency probes unless the build environment changes.
+# Still configure on every invocation: Xmake must see manifest edits and restore
+# the iOS configuration if MiniRTC was built standalone for another platform.
+CONFIG_SIGNATURE="$(print -r -- "${XMAKE_BIN}" "${XMAKE_DEVELOPER_DIR}" \
+  "${MODE}" "${ARCH_NAME}" "16.0" "${XMAKE_PKG_INSTALLDIR}"
+  run_xmake --version | sed -n '1p'
+  DEVELOPER_DIR="${XMAKE_DEVELOPER_DIR}" xcodebuild -version
+  DEVELOPER_DIR="${XMAKE_DEVELOPER_DIR}" xcrun --sdk iphoneos --show-sdk-path
+  DEVELOPER_DIR="${XMAKE_DEVELOPER_DIR}" xcrun --sdk iphoneos --show-sdk-version)"
+
+configure_xmake() {
+  local project_dir="$1"
+  local build_dir="$2"
+  shift 2
+  local stamp="${build_dir}/ios-config-signature"
+  local clean_flags=()
+  if [[ ! -f "${stamp}" || "$(<"${stamp}")" != "${CONFIG_SIGNATURE}" ]]; then
+    clean_flags=(-c)
+  fi
+  run_xmake f -P "${project_dir}" "${clean_flags[@]}" -o "${build_dir}" \
+    -p iphoneos -a arm64 -m "${MODE}" --target_minver=16.0 -y "$@"
+  mkdir -p "${build_dir}"
+  print -r -- "${CONFIG_SIGNATURE}" > "${stamp}"
+}
 
 # Xmake stores the configured build directory relative to the process working
 # directory. Xcode does not guarantee that directory for build phases, so keep
 # configuration, compilation and inspection anchored to the MiniRTC project.
 (
   cd "${MINIRTC_DIR}"
-  run_xmake f -P "${MINIRTC_DIR}" -c -o "${MINIRTC_BUILD_DIR}" \
-    -p iphoneos -a arm64 -m "${MODE}" \
-    --as="${XMAKE_TOOLCHAIN_BIN}/clang" \
-    --target_minver=16.0 --USE_CUDA=false -y
+  configure_xmake "${MINIRTC_DIR}" "${MINIRTC_BUILD_DIR}" \
+    --as="${XMAKE_TOOLCHAIN_BIN}/clang" --USE_CUDA=false
   run_xmake b -P "${MINIRTC_DIR}" minirtc
 )
 
@@ -101,9 +126,7 @@ fi
 # no second project definition to maintain.
 (
   cd "${WIRE_WORK_DIR}"
-  run_xmake f -P "${WIRE_WORK_DIR}" -c -o "${WIRE_BUILD_DIR}" \
-    -p iphoneos -a arm64 -m "${MODE}" \
-    --target_minver=16.0 -y
+  configure_xmake "${WIRE_WORK_DIR}" "${WIRE_BUILD_DIR}"
   run_xmake b -P "${WIRE_WORK_DIR}" crossdesk_wire
 )
 
@@ -144,10 +167,24 @@ for link_name in "${REQUIRED_LINKS[@]}"; do
 done
 
 TEMP_LIBRARY="${OUTPUT_LIBRARY}.tmp"
-rm -f "${TEMP_LIBRARY}"
+MERGE_MANIFEST="${OUTPUT_LIBRARY}.inputs.sha256"
+TEMP_MANIFEST="${MERGE_MANIFEST}.tmp"
+trap 'rm -f "${TEMP_LIBRARY}" "${TEMP_MANIFEST}"' EXIT
+
+# Hash contents as well as paths so same-size archives replaced within the same
+# timestamp tick cannot leave a stale merged library. Preserve the output mtime
+# on no-op builds to avoid relinking the Xcode app.
+shasum -a 256 "${SCRIPT_DIR}/build_minirtc_ios.sh" "${MINIRTC_LIBRARY}" \
+  "${DEPENDENCY_ARCHIVES[@]}" "${WIRE_LIBRARY}" > "${TEMP_MANIFEST}"
+if [[ -f "${OUTPUT_LIBRARY}" ]] && cmp -s "${TEMP_MANIFEST}" "${MERGE_MANIFEST}"; then
+  print "Up to date: ${OUTPUT_LIBRARY}"
+  exit 0
+fi
+
 /usr/bin/libtool -static -o "${TEMP_LIBRARY}" \
   "${MINIRTC_LIBRARY}" "${DEPENDENCY_ARCHIVES[@]}" \
   "${WIRE_LIBRARY}"
 mv -f "${TEMP_LIBRARY}" "${OUTPUT_LIBRARY}"
+mv -f "${TEMP_MANIFEST}" "${MERGE_MANIFEST}"
 
 print "Created ${OUTPUT_LIBRARY}"
