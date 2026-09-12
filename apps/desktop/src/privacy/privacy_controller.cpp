@@ -105,8 +105,14 @@ void PrivacyController::Fail(const std::string& reason) {
 }
 void PrivacyController::CaptureChanged(bool running) {
   std::lock_guard lock(mutex_);
+  // Windows announces a stopped capture while preparing the first session.
+  // Keep automatic privacy pending until capture starts, within its deadline.
+  // Once capture was running or backend enable began, a stop remains a fault.
+  const bool waiting_for_initial_capture =
+      automatic_enable_ && enable_pending_ && !capture_running_;
   capture_running_ = running;
-  if (!running) FailLocked("Capture changed; privacy screen is being turned off");
+  if (!running && !waiting_for_initial_capture)
+    FailLocked("Capture changed; privacy screen is being turned off");
   WakeLocked();
 }
 void PrivacyController::Run(Factory factory) {

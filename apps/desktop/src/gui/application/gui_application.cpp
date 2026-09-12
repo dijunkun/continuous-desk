@@ -2819,10 +2819,11 @@ void GuiApplication::SyncServerWindow() {
                     });
   }
 
-  // macOS covers the local panel with capture-excluded privacy windows. Keep
-  // the panel alive so remote controllers can still see and operate it.
+  // Windows and macOS cover the local panel with capture-excluded privacy
+  // windows. Keep the panel alive throughout privacy transitions so remote
+  // controllers can still see and operate it without resetting its UI state.
   bool show_controller_window = has_connected_controller;
-#if !defined(__APPLE__)
+#if !defined(_WIN32) && !defined(__APPLE__)
   // Preserve the existing panel behavior on other platforms.
   const auto privacy_status = privacy_.Snapshot();
   const bool privacy_covering = privacy_status.overlay_active ||
