@@ -8,6 +8,11 @@ REPO_DIR="${IOS_DIR:h:h}"
 MINIRTC_DIR="${REPO_DIR}/deps/submodules/minirtc"
 CONFIG_NAME="${CONFIGURATION:-Debug}"
 MODE="${CONFIG_NAME:l}"
+MINIRTC_ENABLE_AOM="${MINIRTC_ENABLE_AOM:-false}"
+if [[ "${MINIRTC_ENABLE_AOM}" != "true" && "${MINIRTC_ENABLE_AOM}" != "false" ]]; then
+  print -u2 "MINIRTC_ENABLE_AOM must be true or false."
+  exit 64
+fi
 
 # Keep iOS dependencies isolated from desktop Xmake packages. Besides avoiding
 # cross-project cache collisions, this guarantees every archive is compiled
@@ -85,7 +90,7 @@ fi
 # Still configure on every invocation: Xmake must see manifest edits and restore
 # the iOS configuration if MiniRTC was built standalone for another platform.
 CONFIG_SIGNATURE="$(print -r -- "${XMAKE_BIN}" "${XMAKE_DEVELOPER_DIR}" \
-  "${MODE}" "${ARCH_NAME}" "16.0" "${XMAKE_PKG_INSTALLDIR}"
+  "${MODE}" "${ARCH_NAME}" "16.0" "${XMAKE_PKG_INSTALLDIR}" "${MINIRTC_ENABLE_AOM}"
   run_xmake --version | sed -n '1p'
   DEVELOPER_DIR="${XMAKE_DEVELOPER_DIR}" xcodebuild -version
   DEVELOPER_DIR="${XMAKE_DEVELOPER_DIR}" xcrun --sdk iphoneos --show-sdk-path
@@ -112,7 +117,8 @@ configure_xmake() {
 (
   cd "${MINIRTC_DIR}"
   configure_xmake "${MINIRTC_DIR}" "${MINIRTC_BUILD_DIR}" \
-    --as="${XMAKE_TOOLCHAIN_BIN}/clang" --USE_CUDA=false
+    --as="${XMAKE_TOOLCHAIN_BIN}/clang" --USE_CUDA=false \
+    --MINIRTC_ENABLE_AOM="${MINIRTC_ENABLE_AOM}"
   run_xmake b -P "${MINIRTC_DIR}" minirtc
 )
 
@@ -146,8 +152,11 @@ REQUIRED_LINKS=(
   nice glib-2.0 gobject-2.0 gmodule-2.0 gio-2.0 gthread-2.0 intl
   gupnp-igd-1.6 gupnp-1.6 gssdp-1.6 soup-3.0 nghttp2 sqlite3 psl xml2
   ffi pcre2-8 pcre2-posix z ssl crypto srtp2 openfec opus yuv kcp
-  datachannel usrsctp openh264 dav1d aom SvtAv1Enc
+  datachannel usrsctp openh264 dav1d SvtAv1Enc
 )
+if [[ "${MINIRTC_ENABLE_AOM}" == "true" ]]; then
+  REQUIRED_LINKS+=(aom)
+fi
 DEPENDENCY_ARCHIVES=()
 
 for link_name in "${REQUIRED_LINKS[@]}"; do

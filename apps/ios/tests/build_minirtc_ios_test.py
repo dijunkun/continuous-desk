@@ -67,6 +67,7 @@ elif args[0] == "show":
 ''')
         self.env = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}",
                         XMAKE_BIN=str(self.bin / "xmake"), CONFIGURATION="Release",
+                        MINIRTC_ENABLE_AOM="false",
                         CURRENT_ARCH="arm64", DEVELOPER_DIR=subprocess.check_output(
                             ["xcode-select", "-p"], text=True).strip())
         self.output = self.ios / "Vendor/iphoneos/Release/libCrossDeskMiniRTC.a"
@@ -131,6 +132,22 @@ elif args[0] == "show":
         (self.root / "fail-config").unlink()
         self.run_build()
         self.assertTrue(all("-c" in args for args in self.config_calls()))
+
+    def test_aom_is_only_required_and_merged_when_enabled(self):
+        self.run_build()
+        manifest = Path(str(self.output) + ".inputs.sha256")
+        self.assertNotIn("libaom.a", manifest.read_text())
+        original = self.output.read_bytes()
+        self.env["MINIRTC_ENABLE_AOM"] = "true"
+        result = self.run_build(success=False)
+        self.assertIn("Unable to resolve static dependency libaom.a", result.stderr)
+        self.assertEqual(self.output.read_bytes(), original)
+        shutil.copy2(self.archive, self.library_dir / "libaom.a")
+        self.run_build()
+        self.assertIn("libaom.a", manifest.read_text())
+        self.env["MINIRTC_ENABLE_AOM"] = "false"
+        self.run_build()
+        self.assertNotIn("libaom.a", manifest.read_text())
 
 
 if __name__ == "__main__":

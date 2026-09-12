@@ -131,6 +131,7 @@ PipeWire 不属于强制运行时依赖：程序在运行时检测宿主系统�
 --USE_DRM=true/false: 在 Linux 上启用 DRM 捕获，默认不启用
 --CROSSDESK_PORTABLE=true/false: 构建便携版本，默认不启用
 --CROSSDESK_VERSION=xxx: 指定 CrossDesk 的版本
+--MINIRTC_ENABLE_AOM=true/false: 编译可选 libaom 后端，默认不启用；AV1 仍使用 SVT-AV1 / dav1d
 
 # 示例
 xmake f --CROSSDESK_VERSION=1.4.3 --USE_CUDA=true

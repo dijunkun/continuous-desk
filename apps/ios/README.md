@@ -56,11 +56,16 @@ the desktop-compatible `DisplayN`, `control_audio`, `mouse`, `keyboard`,
 
 ## Video codecs
 
-Every iOS build includes VideoToolbox, OpenH264, dav1d, libaom, and SVT-AV1. H.264 uses
+Every iOS build includes VideoToolbox, OpenH264, dav1d, and SVT-AV1. H.264 uses
 VideoToolbox by default; choose software processing under **设置 → 视频编解码 →
 处理方式** (Settings → Video codec → Processing mode) to use OpenH264 for H.264.
 The change takes effect on the next connection. AV1 encoding uses SVT-AV1 and AV1 decoding
 uses dav1d; VideoToolbox AV1 hardware decoding is currently unsupported.
+
+The unused libaom backends are excluded by default. To include them for development,
+set the `MINIRTC_ENABLE_AOM` environment variable (or Xcode user-defined build setting)
+to `true`. This includes libaom in the merged native archive without changing the
+AV1 factories' choice of SVT-AV1 and dav1d.
 
 ## Physical-device test checklist
 
