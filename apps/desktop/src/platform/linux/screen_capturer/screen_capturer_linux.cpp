@@ -8,6 +8,7 @@
 
 #include <display_stream_id.h>
 #include "platform.h"
+#include "privacy_controller.h"
 #include "rd_log.h"
 #if defined(CROSSDESK_HAS_DRM) && CROSSDESK_HAS_DRM
 #include "screen_capturer_drm.h"
@@ -64,6 +65,13 @@ int ScreenCapturerLinux::Init(const int fps, cb_desktop_data cb) {
       return;
     }
     invalid_stream_id_logged_.store(false, std::memory_order_relaxed);
+    {
+      std::lock_guard lock(privacy_mutex_);
+      if (privacy_ && !capture_paused_ && !capture_announced_) {
+        capture_announced_ = true;
+        privacy_->CaptureChanged(true);
+      }
+    }
     if (callback_orig_) {
       callback_orig_(data, size, width, height, mapped_stream_id.c_str(),
                      native_frame);
@@ -145,6 +153,7 @@ int ScreenCapturerLinux::Init(const int fps, cb_desktop_data cb) {
 }
 
 int ScreenCapturerLinux::Destroy() {
+  Stop();
   if (impl_) {
     impl_->Destroy();
     impl_.reset();
@@ -167,6 +176,11 @@ int ScreenCapturerLinux::Start(bool show_cursor) {
   if (!impl_) {
     LOG_ERROR("Linux screen capturer backend is not initialized");
     return -1;
+  }
+
+  {
+    std::lock_guard lock(privacy_mutex_);
+    capture_paused_ = false;
   }
 
   // X11 output names, DRM connectors and Wayland stream handles may all change
@@ -226,6 +240,11 @@ int ScreenCapturerLinux::Stop() {
     return 0;
   }
   const int ret = impl_->Stop();
+  {
+    std::lock_guard lock(privacy_mutex_);
+    capture_announced_ = false;
+    if (privacy_) privacy_->CaptureChanged(false);
+  }
   UpdateAliasesFromBackend(impl_.get());
   return ret;
 }
@@ -234,12 +253,24 @@ int ScreenCapturerLinux::Pause(int monitor_index) {
   if (!impl_) {
     return -1;
   }
-  return impl_->Pause(monitor_index);
+  const int ret = impl_->Pause(monitor_index);
+  {
+    // An in-flight frame must not announce running again after a pause.
+    std::lock_guard lock(privacy_mutex_);
+    capture_paused_ = true;
+    capture_announced_ = false;
+    if (privacy_) privacy_->CaptureChanged(false);
+  }
+  return ret;
 }
 
 int ScreenCapturerLinux::Resume(int monitor_index) {
   if (!impl_) {
     return -1;
+  }
+  {
+    std::lock_guard lock(privacy_mutex_);
+    capture_paused_ = false;
   }
   return impl_->Resume(monitor_index);
 }

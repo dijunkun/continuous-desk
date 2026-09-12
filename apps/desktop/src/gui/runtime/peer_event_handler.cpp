@@ -405,7 +405,7 @@ void PeerEventHandler::OnConnectionStatus(ConnectionStatus status,
     runtime->show_connection_status_window_ = true;
     {
       std::unique_lock lock(runtime->connection_status_mutex_);
-#if defined(_WIN32) || defined(__APPLE__)
+#if defined(_WIN32) || defined(__APPLE__) || defined(__linux__)
       if (status == ConnectionStatus::Connected &&
           runtime->config_center_->IsEnablePrivacyScreen() &&
           std::none_of(runtime->connection_status_.begin(),

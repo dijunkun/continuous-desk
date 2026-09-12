@@ -1241,7 +1241,7 @@ void GuiApplication::ResetSettingsUi() {
   ui_->main->set_capture_method_index(
       static_cast<int>(config_center_->GetScreenCaptureMethod()));
 #endif
-#if defined(_WIN32) || defined(__APPLE__)
+#if defined(_WIN32) || defined(__APPLE__) || defined(__linux__)
   ui_->main->set_privacy_setting_available(true);
 #else
   ui_->main->set_privacy_setting_available(false);
@@ -2815,11 +2815,11 @@ void GuiApplication::SyncServerWindow() {
                     });
   }
 
-  // Windows and macOS cover the local panel with capture-excluded privacy
-  // windows. Keep the panel alive throughout privacy transitions so remote
+  // Privacy protects local display output while preserving capture.
+  // Keep the panel alive throughout privacy transitions so remote
   // controllers can still see and operate it without resetting its UI state.
   bool show_controller_window = has_connected_controller;
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__linux__)
   // Preserve the existing panel behavior on other platforms.
   const auto privacy_status = privacy_.Snapshot();
   const bool privacy_covering = privacy_status.overlay_active ||
@@ -3025,7 +3025,7 @@ void GuiApplication::SaveSettingsFromUi() {
   main->set_capture_method_index(
       static_cast<int>(config_center_->GetScreenCaptureMethod()));
 #endif
-#if defined(_WIN32) || defined(__APPLE__)
+#if defined(_WIN32) || defined(__APPLE__) || defined(__linux__)
   if (config_center_->SetPrivacyScreen(main->get_privacy_on_connect_enabled()) !=
       0) {
     main->set_privacy_on_connect_enabled(

@@ -25,6 +25,7 @@ class ScreenCapturerLinux : public ScreenCapturer {
 
  public:
   int Init(const int fps, cb_desktop_data cb) override;
+  void SetPrivacyController(PrivacyController* privacy) override { privacy_ = privacy; }
   int Destroy() override;
   int Start(bool show_cursor) override;
   int Stop() override;
@@ -53,6 +54,10 @@ class ScreenCapturerLinux : public ScreenCapturer {
 
  private:
   std::unique_ptr<ScreenCapturer> impl_;
+  PrivacyController* privacy_ = nullptr;
+  std::mutex privacy_mutex_;
+  bool capture_announced_ = false;
+  bool capture_paused_ = false;
   BackendType backend_ = BackendType::kNone;
   int fps_ = 60;
   cb_desktop_data callback_;

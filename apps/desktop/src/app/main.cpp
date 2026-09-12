@@ -24,6 +24,10 @@
 #include "path_manager.h"
 #include "render.h"
 
+#ifdef __linux__
+#include "platform/linux/privacy/privacy_guard.h"
+#endif
+
 #ifdef _WIN32
 namespace {
 
@@ -175,6 +179,14 @@ int HandleServiceCliCommand(const std::string& command) {
 #endif
 
 int main(int argc, char* argv[]) {
+#ifdef __linux__
+  // Run before GUI, configuration, logging or daemon initialization. The
+  // guard owns native privacy resources and restores them if this app exits.
+  if (argc == 2 &&
+      std::strcmp(argv[1], crossdesk::kLinuxPrivacyGuardArgument) == 0) {
+    return crossdesk::RunLinuxPrivacyGuard();
+  }
+#endif
 #ifdef _WIN32
   if (argc == 2 &&
       std::strcmp(argv[1], crossdesk::kSlintRendererProbeArgument) == 0) {

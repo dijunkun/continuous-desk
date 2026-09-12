@@ -171,6 +171,9 @@ function setup_targets()
             add_files("apps/desktop/src/platform/macos/privacy/*.mm")
             add_mxxflags("-fobjc-arc")
             add_frameworks("AppKit", "ApplicationServices", {public = true})
+        elseif is_os("linux") then
+            add_files("apps/desktop/src/platform/linux/privacy/*.cpp")
+            add_syslinks("Xi", {public = true})
         end
 
     if is_os("windows") then
@@ -209,6 +212,7 @@ function setup_targets()
                 "apps/desktop/src/platform/macos/screen_capturer/*.mm")
             add_includedirs("apps/desktop/src/platform/macos/screen_capturer")
         elseif is_os("linux") then
+            add_deps("privacy")
             add_packages("libyuv")
             add_files("apps/desktop/src/platform/linux/screen_capturer/screen_capturer_linux.cpp")
             add_files("apps/desktop/src/platform/linux/screen_capturer/screen_capturer_x11.cpp")

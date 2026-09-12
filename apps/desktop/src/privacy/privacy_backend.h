@@ -57,6 +57,9 @@ std::unique_ptr<PrivacyBackend> CreateMacPrivacyBackend();
 // Flush queued AppKit cleanup after joining the controller at app shutdown.
 void FlushMacPrivacyTasks();
 #endif
+#ifdef __linux__
+std::unique_ptr<PrivacyBackend> CreateLinuxPrivacyBackend();
+#endif
 
 }  // namespace crossdesk
 
